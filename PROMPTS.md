@@ -168,6 +168,30 @@ ago.
 
 ---
 
+## What sessions 1 to 7 found (Sept 2026)
+
+Sessions 1 to 7 were built in one run and committed one per session. Things
+the prompts above did not know:
+
+- fastembed has neither `multilingual-e5-small` nor `bge-reranker-v2-m3`.
+  Both are registered through `add_custom_model`: e5 from its official ONNX
+  export, the reranker from `EmbeddedLLM/bge-reranker-v2-m3-onnx-o3-cpu`
+  because BAAI publishes no ONNX. fastembed's own `bge-reranker-base`
+  misranked English test questions and was rejected.
+- Rerank cost on a laptop CPU: 10 full chunks 3.3 s, 20 chunks 6.3 s. Rerank
+  candidates are capped at 10. Short real chunks reranked in ~0.2 s.
+- The `simple` full-text config keeps stopwords, so an AND query dies on
+  "who". The FTS leg ORs all words and lets `ts_rank_cd` sort it out.
+- Reranker logits go through a sigmoid so `CONFIDENCE_THRESHOLD` reads as a
+  probability. A clear hit scored 0.84, nonsense 0.01, a Finnish question
+  over an English chunk 0.003. Default threshold 0.1; the log decides.
+- `query_log.retrieved` is `{chunks: [...], timings: {...}}` so per-step
+  latency survives into the eval.
+- Gemini model id is `gemini-3.8-flash`, called over REST with urllib. The
+  LLM path is untested until a key is present.
+- Sessions 3 and 6 are untested against a phone. First real test: scan the
+  QR, send `@agent hello`, then a real question.
+
 ## Then stop
 
 Ship it to the real group. Use it daily for **two weeks**. Write nothing new.
