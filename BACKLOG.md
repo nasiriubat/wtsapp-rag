@@ -45,6 +45,18 @@ Supersession and the numbers are the contribution.
   run.
 - Facts with `superseded_by`: promoted to first feature after the eval.
 
+## Known limitations of v0.1 (found while building)
+
+- Messages sent while the app is restarting are dropped. The app takes ~40 s
+  to load models; the gateway logs the failed ingest and does not retry. Fix
+  candidates when the log shows gaps: gateway-side retry, or `messages.upsert`
+  history on reconnect.
+- Gemini 3.x thinks by default, which may push a question past 5 s. One-line
+  fix in `app/answer.py` (`thinkingConfig`) if timings say so.
+- Cross-lingual questions score low on the reranker (Finnish question over an
+  English chunk: 0.003). If the log shows refusals on these, lower the
+  threshold or translate the query before search.
+
 ## Promotion order after the two-week run
 
 1. **Eval harness with published numbers.** Load a GroupMemBench subset through
