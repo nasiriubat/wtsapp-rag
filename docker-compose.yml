@@ -12,9 +12,20 @@ services:
     ports:
       - "5432:5432"
 
+  app:
+    build: ./app
+    env_file: .env
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
   gateway:
     build: ./gateway
     env_file: .env
+    depends_on:
+      - app
     volumes:
       - ./gateway/auth_state:/app/auth_state
     # The QR is printed to stdout; read it with `docker compose logs -f gateway`.
