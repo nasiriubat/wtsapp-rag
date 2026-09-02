@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 import chunking
 import db
+import retrieval
 
 
 async def chunk_loop():
@@ -72,4 +73,5 @@ class Question(BaseModel):
 
 @app.post("/ask")
 def ask(q: Question):
-    return {"answer": "got it", "quote": None}
+    chunks, timings = retrieval.search(q.group_id, q.question)
+    return {"chunks": chunks, "timings": timings}
