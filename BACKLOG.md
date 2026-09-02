@@ -107,14 +107,45 @@ Supersession and the numbers are the contribution.
 
 ## Phase 5 — dashboard
 
-- Per-group config: trigger strings, model, system prompt, enabled tools,
-  retention, opt-out list.
-- Cost panel: tokens and cost per group / user / tool / model. **Hard budget
-  caps with auto-stop** — an OSS tool that silently runs up an API bill gets
-  one bad news cycle and never recovers.
-- Query log viewer with thumbs up/down. This is also the eval dataset.
-- Connection manager: Drive folders, MCP servers, LLM keys.
-- Do not mount the Docker socket into the dashboard container.
+Designed Sept 2026, not built. Earliest sensible start is after the two-week
+run, because pages 2, 4 and 6 are empty until `query_log` has data and the
+settings page only earns knobs the log asks for.
+
+Shape: served by the same FastAPI process at `/admin`. Server-rendered pages,
+htmx for interactivity, no build step, no second container. One admin password
+in `.env`, session cookie. Mobile-first, because the admin is on the phone the
+bot lives on. Do not mount the Docker socket anywhere.
+
+Pages:
+
+1. **Health** — WhatsApp linked, last message seen, last chunk built, models
+   loaded, LLM key valid, disk and RAM. Same code as `./assistant doctor`.
+   The wizard ends on this page.
+2. **Questions** — `query_log` as a table: question, answer, confidence,
+   latency, cost, feedback. Expand a row to see retrieved chunks with scores
+   and which one was quoted. Thumbs up/down plus "wrong, expected X". Filters:
+   refused, low confidence, negative feedback. Export JSONL. This table is
+   the eval set; every thumbs-down is a future test case.
+3. **Group settings** — trigger strings, bot name, answer language (match the
+   question, or fixed), refusal text, confidence threshold, retention days,
+   member opt-out list, quiet hours. The threshold control shows
+   "at 0.42, 18% of past questions would have been refused", computed from
+   `query_log`. That visual turns a magic number into a decision.
+4. **Cost and budget** — tokens and euros per day/week/month by model and by
+   asker. **Hard monthly cap with auto-stop** and one message to the group
+   saying so; alert at 80%. An OSS tool that silently runs up an API bill gets
+   one bad news cycle and never recovers.
+5. **Data** — upload a chat export for backfill from the browser. Re-chunk and
+   re-embed buttons. Delete one member's messages and chunks on request (we
+   run in the EU). Full export.
+6. **Eval** — run the eval set against the current config; show answer
+   accuracy, citation accuracy, abstention rate, p50/p95 latency, cost per
+   question over time. This is where the published numbers come from.
+
+Configurability rule: a setting exists only where two values are both
+reasonable. The seven on page 3 pass. Model, provider, system prompt override,
+tool allowlists and connection manager (LLM keys, Drive, MCP) appear only when
+a second option exists. A dropdown with one entry is a lie.
 
 ## Phase 6 — channels
 
@@ -162,11 +193,20 @@ Supersession and the numbers are the contribution.
 
 - Single `docker-compose.yml`, optional services behind Compose profiles,
   `COMPOSE_PROFILES` in `.env`.
-- Install wizard: **outcome questions, not component pickers.** Recommended vs
-  Manual fork. Preflight check with ✓/⚠/✗, each failure carrying its fix.
+- Install wizard: **outcome questions, not component pickers.** A first-run
+  page at `/setup` after `docker compose up`. Target: under ten minutes from
+  clone to first answer. Five steps:
+  1. Preflight — Compose version, free RAM (embedder + reranker need ~2 GB),
+     free disk, port 8000. Each line ✓/⚠/✗ with the fix next to it.
+  2. LLM key — paste, the wizard makes one real call and shows the reply.
+  3. Link WhatsApp — QR rendered in the browser, page polls until linked.
+  4. Pick the group — list of groups the number is in, by name. Replaces
+     `GROUP_JID` in `.env`. No JID copy-paste.
+  5. Round trip — "send @agent hello"; the page waits and shows the reply.
+     Optional: upload the export for backfill.
+  Recommended path is all defaults. Manual path shows Group settings first.
 - `./assistant doctor` as a permanent command, same code as the health page.
-- Optimize for time-to-first-answer: key → QR → "send @agent hello" → done.
-  Everything else is skippable.
+- Everything after step 5 is skippable.
 
 ## Open source
 
