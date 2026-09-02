@@ -33,3 +33,16 @@ def ingest(m: Message):
              m.quoted_msg_id, m.is_bot, m.ts),
         )
     return {"ok": True}
+
+
+class Question(BaseModel):
+    question: str
+    group_id: str
+    sender_jid: str
+    sender_name: str | None = None
+    wa_msg_id: str
+
+
+@app.post("/ask")
+def ask(q: Question):
+    return {"answer": "got it", "quote": None}
