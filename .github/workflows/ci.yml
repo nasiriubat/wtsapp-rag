@@ -51,5 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build app
-      - run: docker build gateway
+      - run: docker build -t app-image app
+      - run: docker build -t gateway-image gateway
+      # A build proves the Dockerfile parses; only a run proves the image starts.
+      - run: docker run --rm gateway-image node --input-type=module -e "await import('./lib.js'); await import('./queue.js')"
+      - run: docker run --rm app-image python -c "import chunking, retrieval, main"
