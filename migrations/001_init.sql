@@ -42,7 +42,7 @@ CREATE TABLE query_log (
   group_id    TEXT,
   sender_jid  TEXT,
   question    TEXT NOT NULL,
-  retrieved   JSONB,            -- [{chunk_id, score, source}]
+  retrieved   JSONB,            -- {chunks: [{chunk_id, score, source}], timings: {step_ms}}
   answer      TEXT,
   confidence  REAL,
   tokens_in   INT,

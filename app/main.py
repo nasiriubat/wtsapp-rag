@@ -1,5 +1,7 @@
 import asyncio
+import json
 import os
+import time
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -7,9 +9,13 @@ from datetime import datetime
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+import answer
 import chunking
 import db
 import retrieval
+
+THRESHOLD = float(os.environ["CONFIDENCE_THRESHOLD"])
+REFUSAL = "I don't have anything on that."
 
 
 async def chunk_loop():
@@ -71,7 +77,51 @@ class Question(BaseModel):
     wa_msg_id: str
 
 
+def _source(chunk):
+    with db.connect() as conn:
+        return conn.execute(
+            "SELECT wa_msg_id, sender_jid, sender_name, is_bot, body, ts FROM messages WHERE wa_msg_id = %s",
+            (chunk["first_msg_id"],),
+        ).fetchone()
+
+
+def _cite(text, src):
+    # Imported messages have synthetic ids, so WhatsApp cannot resolve a quote to
+    # them. A text citation is the fallback.
+    if src["wa_msg_id"].startswith("import:"):
+        first_line = (src["body"] or "").splitlines()[0]
+        return f'From {src["ts"]:%d %b %Y}, {src["sender_name"]}: "{first_line}"\n\n{text}', None
+    quote = {k: src[k] for k in ("wa_msg_id", "sender_jid", "is_bot", "body")}
+    return text, quote
+
+
 @app.post("/ask")
 def ask(q: Question):
+    t0 = time.perf_counter()
     chunks, timings = retrieval.search(q.group_id, q.question)
-    return {"chunks": chunks, "timings": timings}
+    confidence = chunks[0]["score"] if chunks else 0.0
+    tokens_in = tokens_out = None
+    text, quote = REFUSAL, None
+    if confidence >= THRESHOLD:
+        t = time.perf_counter()
+        text, tokens_in, tokens_out = answer.generate(q.question, chunks)
+        timings["llm_ms"] = round((time.perf_counter() - t) * 1000)
+        if text != REFUSAL:
+            text, quote = _cite(text, _source(chunks[0]))
+    latency_ms = round((time.perf_counter() - t0) * 1000)
+
+    retrieved = {
+        "chunks": [{"chunk_id": c["id"], "score": c["score"], "source": c["source"]} for c in chunks],
+        "timings": timings,
+    }
+    with db.connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO query_log
+              (group_id, sender_jid, question, retrieved, answer, confidence, tokens_in, tokens_out, latency_ms)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (q.group_id, q.sender_jid, q.question, json.dumps(retrieved), text, confidence,
+             tokens_in, tokens_out, latency_ms),
+        )
+    return {"answer": text, "quote": quote}
