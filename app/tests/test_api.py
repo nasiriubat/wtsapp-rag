@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL"), reason="needs Postgres (DATABASE_URL)")
+GW = {"authorization": f"Bearer {os.environ.get('GATEWAY_TOKEN', '')}"}
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +34,7 @@ def test_ingest_is_idempotent(client):
         "ts": "2026-09-02T20:00:00Z",
     }
     for _ in range(2):
-        assert client.post("/ingest", json=body).json() == {"ok": True}
+        assert client.post("/ingest", json=body, headers=GW).json() == {"ok": True}
     with db.connect() as conn:
         n = conn.execute("SELECT count(*) AS n FROM messages WHERE group_id = %s", (group,)).fetchone()["n"]
     assert n == 1

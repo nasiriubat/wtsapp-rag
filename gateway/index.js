@@ -1,20 +1,24 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
 import qrcode from "qrcode-terminal";
 import pino from "pino";
-import { bare, isTrigger, parseTriggers, questionOf, quoteStub, textOf, toPayload } from "./lib.js";
+import { bare, isTrigger, questionOf, quoteStub, textOf, toPayload } from "./lib.js";
+import { loadGroups } from "./config.js";
 import { createQueue } from "./queue.js";
 
-const GROUP_JID = process.env.GROUP_JID || "";
 const APP_URL = process.env.APP_URL || "http://app:8000";
-const TRIGGERS = parseTriggers(process.env.TRIGGERS);
+const TOKEN = process.env.GATEWAY_TOKEN;
 const log = pino();
+if (!TOKEN) {
+  log.fatal("GATEWAY_TOKEN is not set");
+  process.exit(1);
+}
 
 // Returns { status, data }. status 0 means the app was unreachable.
 async function post(route, body) {
   try {
     const res = await fetch(`${APP_URL}${route}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", authorization: `Bearer ${TOKEN}` },
       body: JSON.stringify(body),
     });
     const data = res.ok ? await res.json() : null;
@@ -32,6 +36,16 @@ const retryable = (status) => status === 0 || status >= 500;
 const queue = createQueue("data/queue.jsonl", async (route, body) => !retryable((await post(route, body)).status));
 setInterval(() => queue.flush().catch((err) => log.error({ err: err.message }, "queue flush failed")), 10_000);
 
+let groups = new Map();
+async function refreshGroups() {
+  try {
+    groups = await loadGroups(APP_URL, TOKEN);
+  } catch (err) {
+    log.warn({ err: err.message }, "could not load groups; keeping the previous list");
+  }
+}
+setInterval(refreshGroups, 30_000);
+
 async function ingest(payload) {
   // While older messages are waiting, go behind them so delivery stays in order.
   if (queue.size() === 0) {
@@ -45,16 +59,17 @@ async function ingest(payload) {
   }
 }
 
-async function answer(sock, msg, text, ownJid) {
+async function answer(sock, msg, text, ownJid, triggers) {
   const payload = toPayload(msg, ownJid);
   const { data: reply } = await post("/ask", {
-    question: questionOf(text, TRIGGERS),
+    question: questionOf(text, triggers),
     group_id: payload.group_id,
     sender_jid: payload.sender_jid,
     sender_name: payload.sender_name,
     wa_msg_id: payload.wa_msg_id,
   });
-  if (!reply) return;
+  // answer: null means the app chose silence (quiet hours, opt-out, disabled).
+  if (!reply?.answer) return;
   const quoted = reply.quote ? quoteStub(payload.group_id, reply.quote) : msg;
   const sent = await sock.sendMessage(payload.group_id, { text: reply.answer }, { quoted });
   await ingest(toPayload(sent, ownJid));
@@ -96,22 +111,23 @@ async function connect() {
     for (const msg of messages) {
       const jid = msg.key.remoteJid ?? "";
       if (!jid.endsWith("@g.us")) continue;
-      if (!GROUP_JID) {
-        if (!seen.has(jid)) log.info({ jid }, "group seen; set GROUP_JID in .env");
+      const group = groups.get(jid);
+      if (!group) {
+        if (!seen.has(jid)) log.info({ jid }, "group seen; enable it in the admin to start logging it");
         seen.add(jid);
         continue;
       }
-      if (jid !== GROUP_JID) continue;
       const text = textOf(msg);
       if (text === null) continue;
       const payload = toPayload(msg, ownJid);
       log.info(payload, "message");
       ingest(payload).catch((err) => log.error({ err: err.message }, "ingest failed"));
-      if (!msg.key.fromMe && isTrigger(msg, text, ownJids, TRIGGERS)) {
-        answer(sock, msg, text, ownJid).catch((err) => log.error({ err: err.message }, "answer failed"));
+      if (!msg.key.fromMe && isTrigger(msg, text, ownJids, group.triggers)) {
+        answer(sock, msg, text, ownJid, group.triggers).catch((err) => log.error({ err: err.message }, "answer failed"));
       }
     }
   });
 }
 
+await refreshGroups();
 connect();
