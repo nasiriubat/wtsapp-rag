@@ -60,8 +60,12 @@ quote, because WhatsApp cannot resolve quotes to messages it never saw.
 - `gateway/` — Node + Baileys. Forwards messages, detects triggers, sends
   quote-replies. No business logic.
 - `app/` — Python + FastAPI, one process. Ingest, a 60-second chunking loop,
-  retrieval, answering.
+  retrieval, answering. Applies `app/migrations/*.sql` at startup.
 - Postgres 16 + pgvector, plain SQL.
+
+Development: `pip install -r app/requirements-dev.txt`, then `ruff check app`,
+`pytest` (set `DATABASE_URL` for the integration tests), and `node --test` in
+`gateway/`. CI runs all three on every push.
 
 Pipeline for one question, with numbers measured on a laptop CPU:
 

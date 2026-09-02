@@ -1,21 +1,27 @@
 import asyncio
 import json
+import logging
 import os
 import time
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from pydantic import BaseModel
 
 import answer
 import chunking
 import db
+import embed
+import migrate
+import observe
 import retrieval
 
 THRESHOLD = float(os.environ["CONFIDENCE_THRESHOLD"])
 REFUSAL = "I don't have anything on that."
+log = logging.getLogger("app")
+state = {"ready": False}
 
 
 async def chunk_loop():
@@ -33,6 +39,11 @@ def _crash(task):
 
 @asynccontextmanager
 async def lifespan(app):
+    observe.setup_logging()
+    migrate.run()
+    embed.warm()
+    retrieval.warm()
+    state["ready"] = True
     task = asyncio.create_task(chunk_loop())
     task.add_done_callback(_crash)
     yield
@@ -40,6 +51,29 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health")
+def health():
+    with db.connect() as conn:
+        last = conn.execute("SELECT max(end_ts) AS last FROM chunks").fetchone()["last"]
+        pending = conn.execute("SELECT count(*) AS n FROM messages WHERE NOT chunked").fetchone()["n"]
+    body = {
+        "db": "ok",
+        "models": "ok" if state["ready"] else "loading",
+        "last_chunk_ts": last,
+        "unchunked_messages": pending,
+    }
+    return Response(
+        json.dumps(body, default=str),
+        status_code=200 if state["ready"] else 503,
+        media_type="application/json",
+    )
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(observe.render(), media_type="text/plain; version=0.0.4")
 
 
 class Message(BaseModel):
@@ -63,9 +97,9 @@ def ingest(m: Message):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (wa_msg_id) DO NOTHING
             """,
-            (m.wa_msg_id, m.group_id, m.sender_jid, m.sender_name, m.body,
-             m.quoted_msg_id, m.is_bot, m.ts),
+            (m.wa_msg_id, m.group_id, m.sender_jid, m.sender_name, m.body, m.quoted_msg_id, m.is_bot, m.ts),
         )
+    observe.count("ingest_total")
     return {"ok": True}
 
 
@@ -109,6 +143,19 @@ def ask(q: Question):
         if text != REFUSAL:
             text, quote = _cite(text, _source(chunks[0]))
     latency_ms = round((time.perf_counter() - t0) * 1000)
+    observe.count("ask_total", outcome="refused" if text == REFUSAL else "answered")
+    observe.observe_latency(latency_ms / 1000)
+    log.info(
+        json.dumps(
+            {
+                "event": "ask",
+                "group": q.group_id,
+                "confidence": round(confidence, 3),
+                "latency_ms": latency_ms,
+                "refused": text == REFUSAL,
+            }
+        )
+    )
 
     retrieved = {
         "chunks": [{"chunk_id": c["id"], "score": c["score"], "source": c["source"]} for c in chunks],
@@ -118,10 +165,20 @@ def ask(q: Question):
         conn.execute(
             """
             INSERT INTO query_log
-              (group_id, sender_jid, question, retrieved, answer, confidence, tokens_in, tokens_out, latency_ms)
+              (group_id, sender_jid, question, retrieved, answer, confidence,
+               tokens_in, tokens_out, latency_ms)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (q.group_id, q.sender_jid, q.question, json.dumps(retrieved), text, confidence,
-             tokens_in, tokens_out, latency_ms),
+            (
+                q.group_id,
+                q.sender_jid,
+                q.question,
+                json.dumps(retrieved),
+                text,
+                confidence,
+                tokens_in,
+                tokens_out,
+                latency_ms,
+            ),
         )
     return {"answer": text, "quote": quote}
