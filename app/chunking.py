@@ -1,9 +1,11 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from itertools import groupby
 
 import db
 import embed
 
+log = logging.getLogger(__name__)
 GAP = timedelta(minutes=30)
 MAX_MESSAGES = 15
 MAX_CHARS = 1600  # roughly 400 tokens
@@ -70,4 +72,4 @@ def run_once():
                         "UPDATE messages SET chunked = true WHERE wa_msg_id = ANY(%s)",
                         ([m["wa_msg_id"] for m in ep],),
                     )
-            print(f"chunked {len(eps)} episodes for {group_id}")
+            log.info("chunked", extra={"group": group_id, "episodes": len(eps)})

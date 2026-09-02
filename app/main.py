@@ -7,6 +7,7 @@ import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+import psycopg
 from fastapi import FastAPI, Response
 from pydantic import BaseModel
 
@@ -21,7 +22,6 @@ import retrieval
 THRESHOLD = float(os.environ["CONFIDENCE_THRESHOLD"])
 REFUSAL = "I don't have anything on that."
 log = logging.getLogger("app")
-state = {"ready": False}
 
 
 async def chunk_loop():
@@ -41,9 +41,8 @@ def _crash(task):
 async def lifespan(app):
     observe.setup_logging()
     migrate.run()
-    embed.warm()
-    retrieval.warm()
-    state["ready"] = True
+    # Two independent downloads and ONNX sessions; wall time is the max, not the sum.
+    await asyncio.gather(asyncio.to_thread(embed.warm), asyncio.to_thread(retrieval.warm))
     task = asyncio.create_task(chunk_loop())
     task.add_done_callback(_crash)
     yield
@@ -54,21 +53,17 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")
-def health():
-    with db.connect() as conn:
-        last = conn.execute("SELECT max(end_ts) AS last FROM chunks").fetchone()["last"]
-        pending = conn.execute("SELECT count(*) AS n FROM messages WHERE NOT chunked").fetchone()["n"]
-    body = {
-        "db": "ok",
-        "models": "ok" if state["ready"] else "loading",
-        "last_chunk_ts": last,
-        "unchunked_messages": pending,
-    }
-    return Response(
-        json.dumps(body, default=str),
-        status_code=200 if state["ready"] else 503,
-        media_type="application/json",
-    )
+def health(response: Response):
+    # uvicorn only serves after lifespan finished, so models are loaded whenever
+    # this answers. The database is the only thing that can be down.
+    try:
+        with db.connect() as conn:
+            last = conn.execute("SELECT end_ts FROM chunks ORDER BY id DESC LIMIT 1").fetchone()
+            pending = conn.execute("SELECT count(*) AS n FROM messages WHERE NOT chunked").fetchone()["n"]
+    except psycopg.Error as e:
+        response.status_code = 503
+        return {"db": "down", "error": str(e).strip()}
+    return {"db": "ok", "last_chunk_ts": last["end_ts"] if last else None, "unchunked_messages": pending}
 
 
 @app.get("/metrics")
@@ -143,18 +138,17 @@ def ask(q: Question):
         if text != REFUSAL:
             text, quote = _cite(text, _source(chunks[0]))
     latency_ms = round((time.perf_counter() - t0) * 1000)
-    observe.count("ask_total", outcome="refused" if text == REFUSAL else "answered")
+    refused = text == REFUSAL
+    observe.count("ask_total", outcome="refused" if refused else "answered")
     observe.observe_latency(latency_ms / 1000)
     log.info(
-        json.dumps(
-            {
-                "event": "ask",
-                "group": q.group_id,
-                "confidence": round(confidence, 3),
-                "latency_ms": latency_ms,
-                "refused": text == REFUSAL,
-            }
-        )
+        "ask",
+        extra={
+            "group": q.group_id,
+            "confidence": round(confidence, 3),
+            "latency_ms": latency_ms,
+            "refused": refused,
+        },
     )
 
     retrieved = {

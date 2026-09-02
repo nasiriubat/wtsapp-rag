@@ -10,6 +10,7 @@ _lock = threading.Lock()
 _counters = defaultdict(float)
 _latency = {"count": 0, "sum": 0.0, "buckets": defaultdict(int)}
 BUCKETS = (0.5, 1, 2, 5, 10)
+_STANDARD_ATTRS = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__) | {"message", "asctime"}
 
 
 class JsonFormatter(logging.Formatter):
@@ -20,9 +21,11 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "msg": record.getMessage(),
         }
+        # Anything passed through logging's extra= becomes a top-level field.
+        entry.update({k: v for k, v in record.__dict__.items() if k not in _STANDARD_ATTRS})
         if record.exc_info:
             entry["exc"] = self.formatException(record.exc_info)
-        return json.dumps(entry)
+        return json.dumps(entry, default=str)
 
 
 def setup_logging():
@@ -64,8 +67,12 @@ def _fmt_labels(labels):
 def render():
     lines = []
     with _lock:
-        for (name, labels), value in sorted(_counters.items()):
-            lines.append(f"{name}{_fmt_labels(labels)} {value:g}")
+        for name in sorted({n for n, _ in _counters}):
+            lines.append(f"# TYPE {name} counter")
+            for (n, labels), value in sorted(_counters.items()):
+                if n == name:
+                    lines.append(f"{name}{_fmt_labels(labels)} {value:g}")
+        lines.append("# TYPE ask_latency_seconds histogram")
         for b in BUCKETS:
             lines.append(f'ask_latency_seconds_bucket{{le="{b}"}} {_latency["buckets"][b]}')
         lines.append(f'ask_latency_seconds_bucket{{le="+Inf"}} {_latency["count"]}')

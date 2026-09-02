@@ -77,18 +77,16 @@ def search(group_id, question):
             (group_id, qvec, CANDIDATES),
         ).fetchall()
         tsquery = _or_query(question)
-        fts_rows = (
-            conn.execute(
+        fts_rows = []
+        if tsquery:
+            fts_rows = conn.execute(
                 f"""
-            SELECT {COLUMNS} FROM chunks
-            WHERE group_id = %s AND tsv @@ to_tsquery('simple', %s)
-            ORDER BY ts_rank_cd(tsv, to_tsquery('simple', %s)) DESC LIMIT %s
-            """,
+                SELECT {COLUMNS} FROM chunks
+                WHERE group_id = %s AND tsv @@ to_tsquery('simple', %s)
+                ORDER BY ts_rank_cd(tsv, to_tsquery('simple', %s)) DESC LIMIT %s
+                """,
                 (group_id, tsquery, tsquery, CANDIDATES),
             ).fetchall()
-            if tsquery
-            else []
-        )
     timings["sql_ms"] = _ms(t)
 
     candidates = _fuse(vector_rows, fts_rows)[:RERANK]
