@@ -12,9 +12,20 @@ recorded manual check behind it.
   `{wa_msg_id, sender_jid, is_bot, body}`.
 - Recording our own sent message with `is_bot = true`.
 - Reconnect after a dropped socket; the logged-out path.
+- The gateway staying silent when the app returns `answer: null`.
 
-## Verified with a real key (3 Sept 2026)
+## Needs a key not present
 
-- Gemini `gemini-3.8-flash` answer path: real answer with the decision date,
-  quote payload pointing at the source message, 256 tokens in, 37 out,
-  1.98 s end to end of which 1.77 s was the model.
+- Anthropic client: covered by a mocked request test only. No Anthropic key
+  in `.env`. Gemini, OpenAI and OpenRouter were exercised live.
+
+## Verified live (3 Sept 2026)
+
+- Gemini `gemini-3.8-flash`, OpenAI `gpt-5.4-mini` and OpenRouter
+  `openai/gpt-5.4-mini` each answered the provider test endpoint with "OK"
+  and a real question about seeded chat with a correct answer and a quote
+  payload pointing at the source message. Switching a group's provider
+  through the admin API changed which one answered; `query_log` recorded the
+  provider id, tokens and cost.
+- Cold `docker compose up`: db healthy, then app healthy, then gateway
+  started and printed a QR.

@@ -1,5 +1,9 @@
 # Roadmap to v1.0 — production-ready, audited
 
+Status (3 Sept 2026): phase 0 done and reviewed. Phase 1 built and verified
+live against Gemini, OpenAI and OpenRouter; review in progress. Next: phase 2,
+the admin panel and setup wizard.
+
 v0.1 (Sept 2026) proved the loop: log a group, hybrid-search it, answer with a
 quote-reply, refuse when unsure, log everything. v1.0 turns that into a system
 one operator can run for many groups on several channels, with any LLM
