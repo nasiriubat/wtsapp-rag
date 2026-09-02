@@ -1,0 +1,64 @@
+// Pure functions over Baileys message objects. No socket, no network, so they
+// can be tested without a phone.
+
+export function textOf(msg) {
+  const m = msg.message ?? {};
+  return m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? null;
+}
+
+export function contextOf(msg) {
+  return msg.message?.extendedTextMessage?.contextInfo;
+}
+
+// Device suffixes (":12") vary per login; the identity is the part before them.
+export function bare(jid) {
+  return (jid ?? "").replace(/:\d+(?=@)/, "");
+}
+
+export function parseTriggers(raw) {
+  return (raw || "@agent")
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function toPayload(msg, ownJid) {
+  const key = msg.key;
+  return {
+    wa_msg_id: key.id,
+    group_id: key.remoteJid,
+    // Baileys 7 addresses group members by LID; participantAlt carries the
+    // phone-number JID when known, which is the stable identity across devices.
+    // Our own sends carry no participant at all.
+    sender_jid: key.fromMe ? ownJid : (key.participantAlt ?? key.participant),
+    sender_name: msg.pushName ?? null,
+    body: textOf(msg),
+    quoted_msg_id: contextOf(msg)?.stanzaId ?? null,
+    is_bot: key.fromMe === true,
+    ts: new Date(Number(msg.messageTimestamp) * 1000).toISOString(),
+  };
+}
+
+export function isTrigger(msg, text, ownJids, triggers) {
+  const ctx = contextOf(msg);
+  if ((ctx?.mentionedJid ?? []).some((j) => ownJids.has(bare(j)))) return true;
+  if (ctx?.participant && ownJids.has(bare(ctx.participant))) return true;
+  const lower = text.toLowerCase();
+  return triggers.some((t) => lower.startsWith(t));
+}
+
+export function questionOf(text, triggers) {
+  let q = text;
+  for (const t of triggers) {
+    if (q.toLowerCase().startsWith(t)) q = q.slice(t.length);
+  }
+  // A JID mention renders as "@358401234567" in the text body.
+  return q.replace(/@\d+/g, "").trim();
+}
+
+export function quoteStub(groupJid, quote) {
+  return {
+    key: { remoteJid: groupJid, id: quote.wa_msg_id, participant: quote.sender_jid, fromMe: quote.is_bot },
+    message: { conversation: quote.body ?? "" },
+  };
+}

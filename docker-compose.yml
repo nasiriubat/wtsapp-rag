@@ -7,8 +7,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # initdb runs these once, on an empty volume only.
-      - ./migrations:/docker-entrypoint-initdb.d:ro
     ports:
       - "5432:5432"
 
@@ -31,6 +29,7 @@ services:
       - app
     volumes:
       - ./gateway/auth_state:/app/auth_state
+      - ./gateway/data:/app/data
     # The QR is printed to stdout; read it with `docker compose logs -f gateway`.
     tty: true
     restart: unless-stopped

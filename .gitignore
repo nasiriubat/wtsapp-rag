@@ -1,5 +1,6 @@
 .env
 gateway/auth_state/
+gateway/data/
 node_modules/
 __pycache__/
 .venv/

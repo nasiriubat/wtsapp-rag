@@ -1,92 +1,42 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
 import qrcode from "qrcode-terminal";
 import pino from "pino";
+import { bare, isTrigger, parseTriggers, questionOf, quoteStub, textOf, toPayload } from "./lib.js";
+import { createQueue } from "./queue.js";
 
 const GROUP_JID = process.env.GROUP_JID || "";
 const APP_URL = process.env.APP_URL || "http://app:8000";
-const TRIGGERS = (process.env.TRIGGERS || "@agent")
-  .split(",")
-  .map((t) => t.trim().toLowerCase())
-  .filter(Boolean);
+const TRIGGERS = parseTriggers(process.env.TRIGGERS);
 
-function textOf(msg) {
-  const m = msg.message ?? {};
-  return m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? null;
-}
-
-function contextOf(msg) {
-  return msg.message?.extendedTextMessage?.contextInfo;
-}
-
-// Device suffixes (":12") vary per login; the identity is the part before them.
-function bare(jid) {
-  return (jid ?? "").replace(/:\d+(?=@)/, "");
-}
-
-function toPayload(msg, ownJid) {
-  const key = msg.key;
-  return {
-    wa_msg_id: key.id,
-    group_id: key.remoteJid,
-    // Baileys 7 addresses group members by LID; participantAlt carries the
-    // phone-number JID when known, which is the stable identity across devices.
-    // Our own sends carry no participant at all.
-    sender_jid: key.fromMe ? ownJid : (key.participantAlt ?? key.participant),
-    sender_name: msg.pushName ?? null,
-    body: textOf(msg),
-    quoted_msg_id: contextOf(msg)?.stanzaId ?? null,
-    is_bot: key.fromMe === true,
-    ts: new Date(Number(msg.messageTimestamp) * 1000).toISOString(),
-  };
-}
-
-async function post(path, body) {
+async function post(route, body) {
   // The app may be down or mid-restart. That must not take the gateway down too.
   try {
-    const res = await fetch(`${APP_URL}${path}`, {
+    const res = await fetch(`${APP_URL}${route}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      console.error(`${path} ${res.status}`);
+      console.error(`${route} ${res.status}`);
       return null;
     }
     return await res.json();
   } catch (err) {
-    console.error(`${path} failed: ${err.message}`);
+    console.error(`${route} failed: ${err.message}`);
     return null;
   }
 }
 
-function isTrigger(msg, text, ownJids) {
-  const ctx = contextOf(msg);
-  if ((ctx?.mentionedJid ?? []).some((j) => ownJids.has(bare(j)))) return true;
-  if (ctx?.participant && ownJids.has(bare(ctx.participant))) return true;
-  const lower = text.toLowerCase();
-  return TRIGGERS.some((t) => lower.startsWith(t));
-}
+const queue = createQueue("data/queue.jsonl", async (route, body) => (await post(route, body)) !== null);
 
-function questionOf(text) {
-  let q = text;
-  for (const t of TRIGGERS) {
-    if (q.toLowerCase().startsWith(t)) q = q.slice(t.length);
-  }
-  // A JID mention renders as "@358401234567" in the text body.
-  return q.replace(/@\d+/g, "").trim();
-}
-
-function quoteStub(groupJid, quote) {
-  return {
-    key: { remoteJid: groupJid, id: quote.wa_msg_id, participant: quote.sender_jid, fromMe: quote.is_bot },
-    message: { conversation: quote.body ?? "" },
-  };
+async function ingest(payload) {
+  if ((await post("/ingest", payload)) === null) queue.push("/ingest", payload);
 }
 
 async function answer(sock, msg, text, ownJid) {
   const payload = toPayload(msg, ownJid);
   const reply = await post("/ask", {
-    question: questionOf(text),
+    question: questionOf(text, TRIGGERS),
     group_id: payload.group_id,
     sender_jid: payload.sender_jid,
     sender_name: payload.sender_name,
@@ -95,7 +45,7 @@ async function answer(sock, msg, text, ownJid) {
   if (!reply) return;
   const quoted = reply.quote ? quoteStub(payload.group_id, reply.quote) : msg;
   const sent = await sock.sendMessage(payload.group_id, { text: reply.answer }, { quoted });
-  await post("/ingest", toPayload(sent, ownJid));
+  await ingest(toPayload(sent, ownJid));
 }
 
 async function connect() {
@@ -142,8 +92,8 @@ async function connect() {
       if (text === null) continue;
       const payload = toPayload(msg, ownJid);
       console.log(JSON.stringify(payload));
-      post("/ingest", payload);
-      if (!msg.key.fromMe && isTrigger(msg, text, ownJids)) answer(sock, msg, text, ownJid);
+      ingest(payload);
+      if (!msg.key.fromMe && isTrigger(msg, text, ownJids, TRIGGERS)) answer(sock, msg, text, ownJid);
     }
   });
 }
