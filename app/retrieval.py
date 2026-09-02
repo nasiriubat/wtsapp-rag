@@ -1,6 +1,7 @@
 import math
 import re
 import time
+from functools import cache
 
 from fastembed.common.model_description import ModelSource
 from fastembed.rerank.cross_encoder import TextCrossEncoder
@@ -18,7 +19,17 @@ TextCrossEncoder.add_custom_model(
     model_file="model.onnx",
     additional_files=["model.onnx.data"],
 )
-_reranker = TextCrossEncoder(RERANKER, cache_dir="/models")
+
+
+@cache
+def _reranker():
+    # Lazy so importing this module in tests does not download 2.2 GB.
+    return TextCrossEncoder(RERANKER, cache_dir="/models")
+
+
+def warm():
+    _reranker()
+
 
 CANDIDATES = 30
 # Measured on a laptop CPU: 10 candidates rerank in 3.3 s, 20 in 6.3 s.
@@ -66,20 +77,24 @@ def search(group_id, question):
             (group_id, qvec, CANDIDATES),
         ).fetchall()
         tsquery = _or_query(question)
-        fts_rows = conn.execute(
-            f"""
+        fts_rows = (
+            conn.execute(
+                f"""
             SELECT {COLUMNS} FROM chunks
             WHERE group_id = %s AND tsv @@ to_tsquery('simple', %s)
             ORDER BY ts_rank_cd(tsv, to_tsquery('simple', %s)) DESC LIMIT %s
             """,
-            (group_id, tsquery, tsquery, CANDIDATES),
-        ).fetchall() if tsquery else []
+                (group_id, tsquery, tsquery, CANDIDATES),
+            ).fetchall()
+            if tsquery
+            else []
+        )
     timings["sql_ms"] = _ms(t)
 
     candidates = _fuse(vector_rows, fts_rows)[:RERANK]
     t = time.perf_counter()
-    logits = _reranker.rerank(question, [c["content"] for c in candidates]) if candidates else []
-    for c, logit in zip(candidates, logits):
+    logits = _reranker().rerank(question, [c["content"] for c in candidates]) if candidates else []
+    for c, logit in zip(candidates, logits, strict=True):
         # Sigmoid so CONFIDENCE_THRESHOLD reads as a probability, not a raw logit.
         c["score"] = 1 / (1 + math.exp(-float(logit)))
     timings["rerank_ms"] = _ms(t)

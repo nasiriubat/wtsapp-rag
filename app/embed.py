@@ -1,3 +1,5 @@
+from functools import cache
+
 from fastembed import TextEmbedding
 from fastembed.common.model_description import ModelSource, PoolingType
 
@@ -9,17 +11,24 @@ TextEmbedding.add_custom_model(
     MODEL, pooling=PoolingType.MEAN, normalization=True, sources=ModelSource(hf=MODEL), dim=384
 )
 
-# Loaded at import so the first request does not pay for it.
-_model = TextEmbedding(MODEL, cache_dir="/models")
+
+@cache
+def _model():
+    # Lazy so importing this module in tests does not download 120 MB.
+    return TextEmbedding(MODEL, cache_dir="/models")
+
+
+def warm():
+    _model()
 
 
 # e5 models are trained with these prefixes; recall drops measurably without them.
 def passages(texts):
-    return [v.tolist() for v in _model.embed([f"passage: {t}" for t in texts])]
+    return [v.tolist() for v in _model().embed([f"passage: {t}" for t in texts])]
 
 
 def query(text):
-    return next(_model.embed([f"query: {text}"])).tolist()
+    return next(_model().embed([f"query: {text}"])).tolist()
 
 
 def literal(vec):

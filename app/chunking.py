@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from itertools import groupby
 
 import db
@@ -32,7 +32,7 @@ def _content(episode):
 
 
 def run_once():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with db.connect() as conn:
         # Our own answers are derived from the history; indexing them would make
         # retrieval feed on itself. Empty bodies carry nothing to search.
@@ -50,14 +50,21 @@ def run_once():
             if not eps:
                 continue
             vectors = embed.passages([_content(ep) for ep in eps])
-            for ep, vec in zip(eps, vectors):
+            for ep, vec in zip(eps, vectors, strict=True):
                 with conn.transaction():
                     conn.execute(
                         """
                         INSERT INTO chunks (group_id, content, first_msg_id, start_ts, end_ts, embedding)
                         VALUES (%s, %s, %s, %s, %s, %s::vector)
                         """,
-                        (group_id, _content(ep), ep[0]["wa_msg_id"], ep[0]["ts"], ep[-1]["ts"], embed.literal(vec)),
+                        (
+                            group_id,
+                            _content(ep),
+                            ep[0]["wa_msg_id"],
+                            ep[0]["ts"],
+                            ep[-1]["ts"],
+                            embed.literal(vec),
+                        ),
                     )
                     conn.execute(
                         "UPDATE messages SET chunked = true WHERE wa_msg_id = ANY(%s)",

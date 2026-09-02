@@ -3,7 +3,10 @@ import os
 import psycopg
 from psycopg.rows import dict_row
 
-DSN = f"postgresql://assistant:{os.environ['POSTGRES_PASSWORD']}@db:5432/assistant"
+# Compose reaches Postgres as "db"; CI runs it on localhost and sets DATABASE_URL.
+DSN = os.environ.get("DATABASE_URL") or (
+    f"postgresql://assistant:{os.environ['POSTGRES_PASSWORD']}@db:5432/assistant"
+)
 
 
 def connect():

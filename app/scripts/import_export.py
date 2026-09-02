@@ -4,6 +4,7 @@
 
 Re-running is idempotent: wa_msg_id is derived from the message content.
 """
+
 import hashlib
 import os
 import re
@@ -25,7 +26,9 @@ HEADER = re.compile(
     r"(?P<rest>.*)$"
 )
 NAMED = re.compile(r"^(?P<name>[^:]+?):\s(?P<text>.*)$", re.S)
-PLACEHOLDER = re.compile(r"^<?(?:Media|image|video|audio|sticker|GIF|document|Contact card) omitted>?$|^<attached:", re.I)
+PLACEHOLDER = re.compile(
+    r"^<?(?:Media|image|video|audio|sticker|GIF|document|Contact card) omitted>?$|^<attached:", re.I
+)
 # WhatsApp sprinkles bidi marks at line starts and around names; they are invisible
 # in an editor and break every regex above.
 INVISIBLE = "‎‏‪‫‬‭‮"
@@ -54,11 +57,13 @@ def parse(lines):
             if not named:
                 messages.append(None)  # system line: joins, leaves, encryption notice
                 continue
-            messages.append({
-                "ts": _timestamp(head["date"], head["time"], head["ampm"]),
-                "sender_name": named["name"].strip(INVISIBLE + " "),
-                "body": named["text"].strip(INVISIBLE),
-            })
+            messages.append(
+                {
+                    "ts": _timestamp(head["date"], head["time"], head["ampm"]),
+                    "sender_name": named["name"].strip(INVISIBLE + " "),
+                    "body": named["text"].strip(INVISIBLE),
+                }
+            )
         elif messages and messages[-1] is not None:
             messages[-1]["body"] += "\n" + line
     out = []
@@ -75,8 +80,19 @@ def parse(lines):
 def insert(group_id, messages):
     rows = []
     for m in messages:
-        digest = hashlib.sha1(f"{group_id}|{m['ts'].isoformat()}|{m['sender_name']}|{m['body']}".encode()).hexdigest()
-        rows.append((f"import:{digest[:16]}", group_id, f"import:{m['sender_name']}", m["sender_name"], m["body"], m["ts"]))
+        digest = hashlib.sha1(
+            f"{group_id}|{m['ts'].isoformat()}|{m['sender_name']}|{m['body']}".encode()
+        ).hexdigest()
+        rows.append(
+            (
+                f"import:{digest[:16]}",
+                group_id,
+                f"import:{m['sender_name']}",
+                m["sender_name"],
+                m["body"],
+                m["ts"],
+            )
+        )
     with db.connect() as conn:
         with conn.cursor() as cur:
             cur.executemany(
