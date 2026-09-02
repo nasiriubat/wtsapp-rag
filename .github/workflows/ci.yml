@@ -21,9 +21,9 @@ jobs:
           --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://assistant:ci@localhost:5432/assistant
-      POSTGRES_PASSWORD: ci
-      CONFIDENCE_THRESHOLD: "0.1"
-      GEMINI_API_KEY: test
+      SECRET_KEY: ci-secret
+      ADMIN_PASSWORD: ci-admin
+      GATEWAY_TOKEN: ci-token
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
