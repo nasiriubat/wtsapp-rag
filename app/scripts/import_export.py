@@ -34,8 +34,27 @@ PLACEHOLDER = re.compile(
 INVISIBLE = "‎‏‪‫‬‭‮"
 
 
-def _timestamp(date, time, ampm):
+def _month_first(lines):
+    # A US-locale export is month-first. The file itself tells us: any first
+    # field above 12 means day-first, any second field above 12 means month-first.
+    # Ambiguous files (every day <= 12) default to day-first, like WhatsApp
+    # everywhere outside the US.
+    for line in lines:
+        head = HEADER.match(line.strip(INVISIBLE))
+        if not head:
+            continue
+        first, second, _ = (int(x) for x in re.split(r"[./]", head["date"]))
+        if first > 12:
+            return False
+        if second > 12:
+            return True
+    return False
+
+
+def _timestamp(date, time, ampm, month_first):
     d, m, y = (int(x) for x in re.split(r"[./]", date))
+    if month_first:
+        d, m = m, d
     if y < 100:
         y += 2000
     parts = [int(x) for x in re.split(r"[:.]", time)]
@@ -48,9 +67,11 @@ def _timestamp(date, time, ampm):
 
 
 def parse(lines):
+    lines = [raw.rstrip("\n") for raw in lines]
+    month_first = _month_first(lines)
     messages = []
     for raw in lines:
-        line = raw.rstrip("\n").strip(INVISIBLE)
+        line = raw.strip(INVISIBLE)
         head = HEADER.match(line)
         if head:
             named = NAMED.match(head["rest"])
@@ -59,7 +80,7 @@ def parse(lines):
                 continue
             messages.append(
                 {
-                    "ts": _timestamp(head["date"], head["time"], head["ampm"]),
+                    "ts": _timestamp(head["date"], head["time"], head["ampm"], month_first),
                     "sender_name": named["name"].strip(INVISIBLE + " "),
                     "body": named["text"].strip(INVISIBLE),
                 }
