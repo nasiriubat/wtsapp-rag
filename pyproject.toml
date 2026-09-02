@@ -5,6 +5,8 @@ src = ["app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+# B008: FastAPI's Depends() in a default argument is the framework's idiom.
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["app/tests"]
