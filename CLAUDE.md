@@ -18,7 +18,7 @@ Any LLM provider. Local embeddings and reranker.
 - `app/` — Python + FastAPI, one process. Ingest, chunking loop, retrieval,
   providers, admin panel, eval. Split by feature, not by layer.
 - Postgres 16 + pgvector. Plain SQL via psycopg. Numbered migrations under
-  `migrations/`, applied by the app at startup. No ORM.
+  `app/migrations/`, applied by the app at startup. No ORM.
 - `.env` holds only what must exist before the database does:
   `POSTGRES_PASSWORD`, `SECRET_KEY`, `ADMIN_PASSWORD` (first login). Everything
   the admin owns lives in Postgres.
