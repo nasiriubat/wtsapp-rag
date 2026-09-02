@@ -19,6 +19,9 @@ services:
       - db
     ports:
       - "8000:8000"
+    volumes:
+      # Embedding and reranker models, downloaded once.
+      - models:/models
     restart: unless-stopped
 
   gateway:
@@ -34,3 +37,4 @@ services:
 
 volumes:
   pgdata:
+  models:

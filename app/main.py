@@ -1,11 +1,38 @@
+import asyncio
+import os
+import traceback
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+import chunking
 import db
 
-app = FastAPI()
+
+async def chunk_loop():
+    while True:
+        await asyncio.to_thread(chunking.run_once)
+        await asyncio.sleep(60)
+
+
+def _crash(task):
+    # A dead loop behind a live server is worse than a restart.
+    if not task.cancelled() and task.exception():
+        traceback.print_exception(task.exception())
+        os._exit(1)
+
+
+@asynccontextmanager
+async def lifespan(app):
+    task = asyncio.create_task(chunk_loop())
+    task.add_done_callback(_crash)
+    yield
+    task.cancel()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class Message(BaseModel):
