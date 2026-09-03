@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Data{% endblock %}
+{% block body %}
+<h2>Data</h2>
+{% if message %}<p class="ok">{{ message }}</p>{% endif %}
+
+<table>
+  <thead><tr><th>Group</th><th class="num">Messages</th><th>First</th><th>Last</th><th></th></tr></thead>
+  <tbody>
+  {% for g in groups %}{% set c = counts.get(g.external_id) %}
+    <tr>
+      <td>{{ g.name or g.external_id }}</td>
+      <td class="num">{{ c.messages if c else 0 }}</td>
+      <td><small>{{ c.first.strftime('%d %b %Y') if c else '–' }}</small></td>
+      <td><small>{{ c.last.strftime('%d %b %Y') if c else '–' }}</small></td>
+      <td>
+        <a href="/admin/data/export/{{ g.id }}.jsonl">export</a> ·
+        <form method="post" action="/admin/data/reembed/{{ g.id }}" style="display:inline" onsubmit="return confirm('Rebuild all chunks for this group?')">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline" style="padding:0 0.5rem">re-embed</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="5" class="muted">No groups.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h3>Backfill from a WhatsApp export</h3>
+<p class="muted">On the phone: ⋮ → More → Export chat → Without media. Upload the .txt here. Re-uploading is safe;
+duplicates are skipped. Answers from imported messages carry a text citation because WhatsApp cannot quote
+messages it never saw.</p>
+<form method="post" action="/admin/data/import" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="grid">
+    <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
+    <label>Export file <input type="file" name="file" accept=".txt" required></label>
+  </div>
+  <button>Import</button>
+</form>
+
+<h3>Erase a member</h3>
+<p class="muted">Deletes everything they wrote and rebuilds the chunks that contained it. Add them to the
+group's opt-out list as well if they should stay erased.</p>
+<form method="post" action="/admin/data/purge" onsubmit="return confirm('Erase this member\'s history?')">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="grid">
+    <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
+    <label>Sender id <input name="sender" placeholder="358401234567@s.whatsapp.net" required></label>
+  </div>
+  <button class="secondary">Erase</button>
+</form>
+{% endblock %}

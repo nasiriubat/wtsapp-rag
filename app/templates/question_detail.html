@@ -1,0 +1,33 @@
+<article style="margin:0.5rem 0">
+  <p><strong>Q:</strong> {{ row.question }}</p>
+  <p><strong>A:</strong> {{ row.answer }}</p>
+  <p class="muted">
+    confidence {{ '%.3f' % row.confidence if row.confidence is not none else '–' }} ·
+    tokens {{ row.tokens_in or 0 }} in / {{ row.tokens_out or 0 }} out ·
+    {% for k, v in (row.retrieved or {}).get('timings', {}).items() %}{{ k | replace('_ms', '') }} {{ v }} ms{% if not loop.last %}, {% endif %}{% endfor %}
+  </p>
+  {% if retrieved %}
+  <details>
+    <summary>Retrieved chunks ({{ retrieved | length }})</summary>
+    <table>
+      <thead><tr><th class="num">Score</th><th>Via</th><th>Chunk</th></tr></thead>
+      <tbody>
+      {% for c in retrieved %}
+        <tr>
+          <td class="num">{{ '%.3f' % c.score }}</td>
+          <td>{{ c.source }}</td>
+          <td class="wrap">{% if c.chunk %}<small class="muted">{{ c.chunk.start_ts.strftime('%d %b %Y') }}</small><br>{{ c.chunk.content }}{% else %}<span class="muted">chunk {{ c.chunk_id }} no longer exists</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+  <form hx-post="/admin/questions/{{ row.id }}/feedback" hx-target="closest article" hx-swap="outerHTML" class="grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="note" placeholder="Wrong, expected…" value="{{ row.feedback_note or '' }}">
+    <button name="value" value="1" class="{{ 'secondary' if row.feedback != 1 }}">👍 Good</button>
+    <button name="value" value="-1" class="{{ 'secondary' if row.feedback != -1 }}">👎 Wrong</button>
+    <button name="value" value="0" class="secondary outline">Clear</button>
+  </form>
+</article>
