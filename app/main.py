@@ -98,9 +98,11 @@ class Message(BaseModel):
 
 @app.post("/ingest", dependencies=[Depends(gateway_api.require_token)])
 def ingest(m: Message):
+    # The app owns the group list. The gateway's copy can be 30 s stale or replayed
+    # from its queue, so unknown, disabled and opted-out senders are dropped here.
     group = groups.get(m.group_id)
-    if group and m.sender_jid in group["settings"]["opt_out"]:
-        observe.count("ingest_total", outcome="opted_out")
+    if group is None or not group["enabled"] or m.sender_jid in group["settings"]["opt_out"]:
+        observe.count("ingest_total", outcome="dropped")
         return {"ok": True}
     with db.connect() as conn:
         conn.execute(
@@ -198,7 +200,9 @@ def ask(q: Question):
             text, *tokens = answer.generate(q.question, chunks, provider, s)
             timings["llm_ms"] = round((time.perf_counter() - t) * 1000)
             cost = providers.cost(provider, *tokens)
-            if text != s["refusal_text"]:
+            if answer.is_refusal(text):
+                text = s["refusal_text"]
+            else:
                 text, quote = _cite(text, _source(chunks[0]))
                 outcome = "answered"
     latency_ms = round((time.perf_counter() - t0) * 1000)

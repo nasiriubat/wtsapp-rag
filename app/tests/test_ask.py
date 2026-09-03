@@ -1,43 +1,28 @@
 """The /ask decision tree with retrieval and the LLM replaced by fakes.
 Needs Postgres for groups, providers and the query log."""
 
-import os
 import uuid
 from datetime import UTC, datetime
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import GW, needs_db
 
-pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL"), reason="needs Postgres (DATABASE_URL)")
-
-GW = {"authorization": f"Bearer {os.environ.get('GATEWAY_TOKEN', '')}"}
+pytestmark = needs_db
 NOW = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
 
 
 def fake_chunks(score):
-    return [
-        {
-            "id": 1,
-            "content": "Anna: x",
-            "first_msg_id": "src-1",
-            "start_ts": NOW,
-            "end_ts": NOW,
-            "score": score,
-            "source": "vector",
-        }
-    ], {"embed_ms": 1}
+    chunk = {"id": 1, "content": "Anna: x", "first_msg_id": "src-1", "start_ts": NOW, "end_ts": NOW}
+    return [{**chunk, "score": score, "source": "vector"}], {"embed_ms": 1}
 
 
 @pytest.fixture()
-def env(monkeypatch):
+def env(client, monkeypatch):
     import db
     import groups
-    import migrate
     import providers
     import retrieval
-    from main import app
 
-    migrate.run()
     gid = f"test-{uuid.uuid4()}@g.us"
     group = groups.create("whatsapp", gid, settings={"confidence_threshold": 0.5})
     provider = providers.create("p", "openai", "k", "m", price_in=1, price_out=1)
@@ -50,7 +35,7 @@ def env(monkeypatch):
         )
     monkeypatch.setattr(retrieval, "search", lambda g, q: fake_chunks(0.9))
     monkeypatch.setattr(providers, "generate", lambda p, s, u: ("An answer.", 100, 10))
-    yield {"client": TestClient(app), "gid": gid, "group": group, "provider": provider}
+    yield {"client": client, "gid": gid, "group": group, "provider": provider}
     with db.connect() as conn:
         conn.execute("DELETE FROM messages WHERE wa_msg_id = 'src-1'")
         conn.execute("DELETE FROM query_log WHERE group_id = %s", (gid,))
@@ -65,10 +50,8 @@ def ask(env, **over):
 
 
 def test_rejects_without_gateway_token(env):
-    res = env["client"].post(
-        "/ask", json={"question": "q", "group_id": env["gid"], "sender_jid": "2@s", "wa_msg_id": "m"}
-    )
-    assert res.status_code == 401
+    body = {"question": "q", "group_id": env["gid"], "sender_jid": "2@s", "wa_msg_id": "m"}
+    assert env["client"].post("/ask", json=body).status_code == 401
 
 
 def test_unknown_group_is_silent(env):
@@ -87,6 +70,28 @@ def test_answers_with_quote_and_logs_cost(env):
     assert float(row["cost"]) == pytest.approx(110 / 1_000_000)
 
 
+def test_model_sentinel_becomes_the_groups_refusal_text(env, monkeypatch):
+    import groups
+    import providers
+
+    groups.update(env["group"]["id"], settings={**env["group"]["settings"], "refusal_text": "Ei tietoa."})
+    monkeypatch.setattr(providers, "generate", lambda p, s, u: ("NO_ANSWER.", 100, 2))
+    assert ask(env).json() == {"answer": "Ei tietoa.", "quote": None}
+
+
+def test_missing_usage_is_estimated_so_budgets_still_count(env, monkeypatch):
+    import db
+    import providers
+
+    monkeypatch.setattr(providers, "generate", lambda p, s, u: ("An answer.", None, None))
+    ask(env)
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT tokens_in, cost FROM query_log WHERE group_id = %s", (env["gid"],)
+        ).fetchone()
+    assert row["tokens_in"] > 0 and float(row["cost"]) > 0
+
+
 def test_refuses_below_threshold_without_calling_provider(env, monkeypatch):
     import providers
     import retrieval
@@ -101,6 +106,16 @@ def test_budget_cap_stops_answering(env):
 
     groups.update(env["group"]["id"], settings={**env["group"]["settings"], "monthly_cap_eur": 0})
     assert ask(env).json()["answer"].startswith("The monthly answer budget is used up")
+
+
+def test_disabled_pinned_provider_falls_back_to_default(env):
+    import groups
+    import providers
+
+    pinned = providers.create("off", "openai", "k", "m", enabled=False)
+    groups.update(env["group"]["id"], provider_id=pinned["id"])
+    assert ask(env).json()["answer"] == "An answer."
+    providers.delete(pinned["id"])
 
 
 def test_no_provider_configured(env):
@@ -138,5 +153,5 @@ def test_opted_out_member_is_not_stored(env):
     with db.connect() as conn:
         n = conn.execute(
             "SELECT count(*) AS n FROM messages WHERE wa_msg_id = %s", (body["wa_msg_id"],)
-        ).fetchone()["n"]
-    assert n == 0
+        ).fetchone()
+    assert n["n"] == 0

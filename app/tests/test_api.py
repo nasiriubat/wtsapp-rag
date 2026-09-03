@@ -1,43 +1,40 @@
-import os
 import uuid
 
-import pytest
-from fastapi.testclient import TestClient
+from conftest import GW, needs_db
 
-pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL"), reason="needs Postgres (DATABASE_URL)")
-GW = {"authorization": f"Bearer {os.environ.get('GATEWAY_TOKEN', '')}"}
+pytestmark = needs_db
 
 
-@pytest.fixture(scope="module")
-def client():
+def test_ingest_is_idempotent_and_drops_unknown_groups(client):
     import db
-    import migrate
-    from main import app
+    import groups
 
-    migrate.run()
-    # No lifespan: that would load the models and start the chunk loop.
-    yield TestClient(app)
-    with db.connect() as conn:
-        conn.execute("DELETE FROM messages WHERE group_id LIKE 'test-%'")
-
-
-def test_ingest_is_idempotent(client):
-    import db
-
-    group = f"test-{uuid.uuid4()}@g.us"
+    gid = f"test-{uuid.uuid4()}@g.us"
     body = {
-        "wa_msg_id": f"{group}-1",
-        "group_id": group,
+        "wa_msg_id": f"{gid}-1",
+        "group_id": gid,
         "sender_jid": "1@s",
-        "sender_name": "Anna",
         "body": "hello",
         "ts": "2026-09-02T20:00:00Z",
     }
+
+    assert client.post("/ingest", json=body, headers=GW).json() == {"ok": True}
+    with db.connect() as conn:
+        assert (
+            conn.execute("SELECT count(*) AS n FROM messages WHERE group_id = %s", (gid,)).fetchone()["n"]
+            == 0
+        )
+
+    group = groups.create("whatsapp", gid)
     for _ in range(2):
         assert client.post("/ingest", json=body, headers=GW).json() == {"ok": True}
     with db.connect() as conn:
-        n = conn.execute("SELECT count(*) AS n FROM messages WHERE group_id = %s", (group,)).fetchone()["n"]
-    assert n == 1
+        assert (
+            conn.execute("SELECT count(*) AS n FROM messages WHERE group_id = %s", (gid,)).fetchone()["n"]
+            == 1
+        )
+        conn.execute("DELETE FROM messages WHERE group_id = %s", (gid,))
+    groups.delete(group["id"])
 
 
 def test_health_reports_db_state(client, monkeypatch):
