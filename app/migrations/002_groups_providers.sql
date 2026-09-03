@@ -45,6 +45,3 @@ CREATE TABLE audit_log (
 ALTER TABLE query_log
   ADD COLUMN provider_id BIGINT,
   ADD COLUMN cost NUMERIC(12, 6);
-
--- The budget check sums a month of cost per group on every question.
-CREATE INDEX query_log_group_ts ON query_log (group_id, ts);

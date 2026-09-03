@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 import db
 import groups
 import providers
+import retention
 
 basic = HTTPBasic()
 
@@ -36,6 +37,16 @@ def audit(action, target, detail=None):
 
 def _redact(detail):
     return {k: ("***" if k == "api_key" else v) for k, v in detail.items()}
+
+
+def _patch(update, target_id, fields, action):
+    if not fields:
+        raise HTTPException(422, "nothing to update")
+    row = update(target_id, **fields)
+    if row is None:
+        raise HTTPException(404)
+    audit(action, str(target_id), _redact(fields))
+    return row
 
 
 # --- providers -------------------------------------------------------------
@@ -80,14 +91,7 @@ def create_provider(body: ProviderIn):
 
 @router.patch("/providers/{provider_id}")
 def patch_provider(provider_id: int, body: ProviderPatch):
-    fields = body.model_dump(exclude_none=True)
-    if not fields:
-        raise HTTPException(422, "nothing to update")
-    row = providers.update(provider_id, **fields)
-    if row is None:
-        raise HTTPException(404)
-    audit("provider.update", str(provider_id), _redact(fields))
-    return row
+    return _patch(providers.update, provider_id, body.model_dump(exclude_none=True), "provider.update")
 
 
 @router.delete("/providers/{provider_id}", status_code=204)
@@ -146,13 +150,15 @@ def create_group(body: GroupIn):
 
 @router.patch("/groups/{group_id}")
 def patch_group(group_id: int, body: GroupPatch):
-    fields = body.model_dump(exclude_unset=True)
-    if not fields:
-        raise HTTPException(422, "nothing to update")
-    row = groups.update(group_id, **fields)
-    if row is None:
+    before = groups.get_by_id(group_id)
+    if before is None:
         raise HTTPException(404)
-    audit("group.update", str(group_id), fields)
+    fields = body.model_dump(exclude_unset=True)
+    row = _patch(groups.update, group_id, fields, "group.update")
+    # Opting someone out is an erasure, not just a filter on new messages.
+    for sender in set(row["settings"]["opt_out"]) - set(before["settings"]["opt_out"]):
+        n = retention.purge_sender(row["external_id"], sender)
+        audit("member.purge", row["external_id"], {"sender": sender, "messages": n})
     return row
 
 

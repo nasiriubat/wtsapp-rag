@@ -43,8 +43,10 @@ def run_once():
         )
         rows = conn.execute(
             """
-            SELECT group_id, wa_msg_id, sender_name, sender_jid, body, ts
-            FROM messages WHERE NOT chunked ORDER BY group_id, ts
+            SELECT m.group_id, m.wa_msg_id, m.sender_name, m.sender_jid, m.body, m.ts
+            FROM messages m LEFT JOIN groups g ON g.external_id = m.group_id
+            WHERE NOT m.chunked AND NOT coalesce(g.settings->'opt_out' ? m.sender_jid, false)
+            ORDER BY m.group_id, m.ts
             """
         ).fetchall()
         for group_id, msgs in groupby(rows, key=lambda r: r["group_id"]):

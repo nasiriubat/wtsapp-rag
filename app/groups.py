@@ -17,9 +17,9 @@ class Settings(BaseModel):
     refusal_text: str = REFUSAL
     answer_language: str = "auto"  # or a language name the model understands
     retention_days: int | None = Field(None, ge=1)
-    opt_out: list[str] = []  # sender ids whose messages are never stored
+    opt_out: list[str] = []  # sender ids whose messages are erased and never stored again
     quiet_hours: dict | None = None  # {"start": "22:00", "end": "07:00", "tz": "Europe/Helsinki"}
-    monthly_cap_eur: float | None = Field(None, ge=0)
+    monthly_cap_eur: float | None = Field(None, ge=0)  # calendar month, UTC
 
 
 class GlobalSettings(BaseModel):
@@ -44,14 +44,17 @@ def _merge(row):
     return {**row, "settings": Settings(**row["settings"]).model_dump()}
 
 
-def get(external_id):
+def _one(sql, params):
     with db.connect() as conn:
-        return _merge(conn.execute("SELECT * FROM groups WHERE external_id = %s", (external_id,)).fetchone())
+        return _merge(conn.execute(sql, params).fetchone())
+
+
+def get(external_id):
+    return _one("SELECT * FROM groups WHERE external_id = %s", (external_id,))
 
 
 def get_by_id(group_id):
-    with db.connect() as conn:
-        return _merge(conn.execute("SELECT * FROM groups WHERE id = %s", (group_id,)).fetchone())
+    return _one("SELECT * FROM groups WHERE id = %s", (group_id,))
 
 
 def list_all():
@@ -61,29 +64,20 @@ def list_all():
 
 def create(channel, external_id, name=None, settings=None, provider_id=None, enabled=True):
     s = Settings(**(settings or {})).model_dump()
-    with db.connect() as conn:
-        return _merge(
-            conn.execute(
-                """
-                INSERT INTO groups (channel, external_id, name, enabled, provider_id, settings)
-                VALUES (%s, %s, %s, %s, %s, %s) RETURNING *
-                """,
-                (channel, external_id, name, enabled, provider_id, json.dumps(s)),
-            ).fetchone()
-        )
+    return _one(
+        """
+        INSERT INTO groups (channel, external_id, name, enabled, provider_id, settings)
+        VALUES (%s, %s, %s, %s, %s, %s) RETURNING *
+        """,
+        (channel, external_id, name, enabled, provider_id, json.dumps(s)),
+    )
 
 
 def update(group_id, **fields):
     if "settings" in fields:
         fields["settings"] = json.dumps(Settings(**fields["settings"]).model_dump())
     assignments = ", ".join(f"{k} = %s" for k in fields)
-    with db.connect() as conn:
-        return _merge(
-            conn.execute(
-                f"UPDATE groups SET {assignments} WHERE id = %s RETURNING *",
-                (*fields.values(), group_id),
-            ).fetchone()
-        )
+    return _one(f"UPDATE groups SET {assignments} WHERE id = %s RETURNING *", (*fields.values(), group_id))
 
 
 def delete(group_id):
@@ -100,10 +94,10 @@ def global_settings():
 def set_global(**values):
     clean = GlobalSettings(**{**global_settings(), **values}).model_dump()
     with db.connect() as conn:
-        for key, value in clean.items():
+        for key in values:
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES (%s, %s) "
                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-                (key, json.dumps(value)),
+                (key, json.dumps(clean[key])),
             )
     return clean
