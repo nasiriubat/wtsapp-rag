@@ -15,13 +15,6 @@ export function bare(jid) {
   return (jid ?? "").replace(/:\d+(?=@)/, "");
 }
 
-export function parseTriggers(raw) {
-  return (raw || "@agent")
-    .split(",")
-    .map((t) => t.trim().toLowerCase())
-    .filter(Boolean);
-}
-
 export function toPayload(msg, ownJid) {
   const key = msg.key;
   return {

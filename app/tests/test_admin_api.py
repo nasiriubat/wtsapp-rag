@@ -1,21 +1,8 @@
-import os
 import uuid
 
-import pytest
-from fastapi.testclient import TestClient
+from conftest import AUTH, needs_db
 
-pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL"), reason="needs Postgres (DATABASE_URL)")
-
-AUTH = ("admin", os.environ.get("ADMIN_PASSWORD", ""))
-
-
-@pytest.fixture(scope="module")
-def client():
-    import migrate
-    from main import app
-
-    migrate.run()
-    return TestClient(app)
+pytestmark = needs_db
 
 
 def test_requires_basic_auth(client):
@@ -46,6 +33,7 @@ def test_provider_crud_never_returns_the_key(client):
 
     patched = client.patch(f"/api/providers/{pid}", json={"model": "y", "api_key": "sk-new"}, auth=AUTH)
     assert patched.json()["model"] == "y"
+    assert client.patch(f"/api/providers/{pid}", json={}, auth=AUTH).status_code == 422
 
     with db.connect() as conn:
         raw = conn.execute("SELECT api_key FROM providers WHERE id = %s", (pid,)).fetchone()["api_key"]
@@ -82,6 +70,7 @@ def test_group_crud_and_settings_validation(client):
     )
     assert ok.json()["settings"]["triggers"] == ["@bot"]
     assert ok.json()["settings"]["monthly_cap_eur"] == 5
+    assert client.patch("/api/groups/999999", json={"name": "x"}, auth=AUTH).status_code == 404
 
     assert client.delete(f"/api/groups/{group_id}", auth=AUTH).status_code == 204
 

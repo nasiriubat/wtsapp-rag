@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bare, isTrigger, parseTriggers, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
+import { bare, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
 
 const OWN = "358401111111@s.whatsapp.net";
 const OWN_LID = "123456789@lid";
 const ownJids = new Set([OWN, OWN_LID]);
-const triggers = parseTriggers("@agent, hey bot");
+const triggers = ["@agent", "hey bot"];
 
 function msg({ text, mentioned = [], quotedParticipant, fromMe = false, participant = "358402222222@s.whatsapp.net" }) {
   const contextInfo = { mentionedJid: mentioned, participant: quotedParticipant, stanzaId: quotedParticipant ? "Q1" : undefined };
@@ -77,9 +77,4 @@ test("quoteStub builds the key Baileys needs", () => {
   const stub = quoteStub("120363@g.us", { wa_msg_id: "S1", sender_jid: "358@s.whatsapp.net", is_bot: false, body: "text" });
   assert.deepEqual(stub.key, { remoteJid: "120363@g.us", id: "S1", participant: "358@s.whatsapp.net", fromMe: false });
   assert.equal(stub.message.conversation, "text");
-});
-
-test("parseTriggers defaults and normalizes", () => {
-  assert.deepEqual(parseTriggers(""), ["@agent"]);
-  assert.deepEqual(parseTriggers(" @Bot ,, ask "), ["@bot", "ask"]);
 });
