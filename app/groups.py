@@ -80,6 +80,21 @@ def update(group_id, **fields):
     return _one(f"UPDATE groups SET {assignments} WHERE id = %s RETURNING *", (*fields.values(), group_id))
 
 
+def apply(group_id, **fields):
+    """Update a group and honour what the change implies. Opting a member out
+    is an erasure, not just a filter on new messages. Returns (row, purged)."""
+    import retention
+
+    before = get_by_id(group_id)
+    if before is None:
+        return None, []
+    row = update(group_id, **fields)
+    purged = []
+    for sender in set(row["settings"]["opt_out"]) - set(before["settings"]["opt_out"]):
+        purged.append((sender, retention.purge_sender(row["external_id"], sender)))
+    return row, purged
+
+
 def delete(group_id):
     with db.connect() as conn:
         conn.execute("DELETE FROM groups WHERE id = %s", (group_id,))

@@ -1,5 +1,6 @@
 """Server-rendered admin panel. Pages live in one module each under admin/."""
 
+import html
 import pathlib
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -9,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from admin import auth
 
 templates = Jinja2Templates(directory=str(pathlib.Path(__file__).resolve().parent.parent / "templates"))
+escape = html.escape
 
 public = APIRouter(prefix="/admin")
 router = APIRouter(prefix="/admin", dependencies=[Depends(auth.require_session)])
@@ -17,11 +19,6 @@ forms = APIRouter(prefix="/admin", dependencies=[Depends(auth.require_session), 
 
 def render(request, name, **ctx):
     return templates.TemplateResponse(request, name, {"csrf": auth.csrf_token(request), **ctx})
-
-
-def fragment(request, name, **ctx):
-    """htmx swaps in an element, not a page. Same template, no layout."""
-    return render(request, name, partial=True, **ctx)
 
 
 @public.get("/login", response_class=HTMLResponse)
@@ -54,7 +51,17 @@ def logout():
     return res
 
 
-from admin import health  # noqa: E402  (pages import this module, so they load last)
+from admin import (  # noqa: E402  (pages import this module)
+    health,
+    pages_cost,
+    pages_data,
+    pages_groups,
+    pages_providers,
+    pages_questions,
+)
 
 # "/admin" itself; a sub-router cannot own an empty path.
 router.add_api_route("", health.page, methods=["GET"])
+for module in (pages_providers, pages_groups, pages_questions, pages_cost, pages_data):
+    router.include_router(module.pages)
+    forms.include_router(module.actions)

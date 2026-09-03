@@ -1,6 +1,5 @@
 """Admin JSON API. One admin, HTTP Basic, every write audited."""
 
-import json
 import os
 import secrets
 
@@ -9,10 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field
 
+import audit
 import db
 import groups
 import providers
-import retention
 
 basic = HTTPBasic()
 
@@ -27,25 +26,13 @@ def require_admin(creds: HTTPBasicCredentials = Depends(basic)):
 router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
 
 
-def audit(action, target, detail=None):
-    with db.connect() as conn:
-        conn.execute(
-            "INSERT INTO audit_log (actor, action, target, detail) VALUES (%s, %s, %s, %s)",
-            ("admin", action, target, json.dumps(detail, default=str) if detail is not None else None),
-        )
-
-
-def _redact(detail):
-    return {k: ("***" if k == "api_key" else v) for k, v in detail.items()}
-
-
 def _patch(update, target_id, fields, action):
     if not fields:
         raise HTTPException(422, "nothing to update")
     row = update(target_id, **fields)
     if row is None:
         raise HTTPException(404)
-    audit(action, str(target_id), _redact(fields))
+    audit.log(action, str(target_id), fields)
     return row
 
 
@@ -85,7 +72,7 @@ def create_provider(body: ProviderIn):
     if body.kind not in providers.KINDS:
         raise HTTPException(422, f"kind must be one of {sorted(providers.KINDS)}")
     row = providers.create(**body.model_dump())
-    audit("provider.create", str(row["id"]), _redact(body.model_dump()))
+    audit.log("provider.create", str(row["id"]), body.model_dump())
     return row
 
 
@@ -97,11 +84,11 @@ def patch_provider(provider_id: int, body: ProviderPatch):
 @router.delete("/providers/{provider_id}", status_code=204)
 def delete_provider(provider_id: int):
     providers.delete(provider_id)
-    audit("provider.delete", str(provider_id))
+    audit.log("provider.delete", str(provider_id))
 
 
-@router.post("/providers/{provider_id}/test")
-def test_provider(provider_id: int):
+def run_provider_test(provider_id):
+    """Shared by the JSON API and the panel's test button."""
     provider = providers.get(provider_id)
     if provider is None:
         raise HTTPException(404)
@@ -111,8 +98,13 @@ def test_provider(provider_id: int):
         raise HTTPException(502, f"{e.response.status_code}: {e.response.text[:300]}") from e
     except httpx.TransportError as e:
         raise HTTPException(502, f"unreachable: {e}") from e
-    audit("provider.test", str(provider_id), {"reply": reply})
-    return {"ok": True, "reply": reply}
+    audit.log("provider.test", str(provider_id), {"reply": reply})
+    return reply
+
+
+@router.post("/providers/{provider_id}/test")
+def test_provider(provider_id: int):
+    return {"ok": True, "reply": run_provider_test(provider_id)}
 
 
 # --- groups ----------------------------------------------------------------
@@ -144,28 +136,32 @@ def create_group(body: GroupIn):
     if groups.get(body.external_id):
         raise HTTPException(409, "group already exists")
     row = groups.create(**{**body.model_dump(), "settings": body.settings.model_dump()})
-    audit("group.create", body.external_id, body.model_dump())
+    audit.log("group.create", body.external_id, body.model_dump())
+    return row
+
+
+def apply_group(group_id, fields):
+    """Shared by the JSON API and the panel: update, purge, audit."""
+    if not fields:
+        raise HTTPException(422, "nothing to update")
+    row, purged = groups.apply(group_id, **fields)
+    if row is None:
+        raise HTTPException(404)
+    audit.log("group.update", str(group_id), fields)
+    for sender, n in purged:
+        audit.log("member.purge", row["external_id"], {"sender": sender, "messages": n})
     return row
 
 
 @router.patch("/groups/{group_id}")
 def patch_group(group_id: int, body: GroupPatch):
-    before = groups.get_by_id(group_id)
-    if before is None:
-        raise HTTPException(404)
-    fields = body.model_dump(exclude_unset=True)
-    row = _patch(groups.update, group_id, fields, "group.update")
-    # Opting someone out is an erasure, not just a filter on new messages.
-    for sender in set(row["settings"]["opt_out"]) - set(before["settings"]["opt_out"]):
-        n = retention.purge_sender(row["external_id"], sender)
-        audit("member.purge", row["external_id"], {"sender": sender, "messages": n})
-    return row
+    return apply_group(group_id, body.model_dump(exclude_unset=True))
 
 
 @router.delete("/groups/{group_id}", status_code=204)
 def delete_group(group_id: int):
     groups.delete(group_id)
-    audit("group.delete", str(group_id))
+    audit.log("group.delete", str(group_id))
 
 
 # --- global settings, questions, audit -------------------------------------
@@ -179,7 +175,7 @@ def get_settings():
 @router.put("/settings")
 def put_settings(body: groups.GlobalSettings):
     clean = groups.set_global(**body.model_dump())
-    audit("settings.update", "global", clean)
+    audit.log("settings.update", "global", clean)
     return clean
 
 

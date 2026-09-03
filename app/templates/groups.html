@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Groups{% endblock %}
+{% block body %}
+<h2>Groups</h2>
+{% if groups %}
+<table>
+  <thead><tr><th>Name</th><th>Channel</th><th>Id</th><th>Triggers</th><th>Threshold</th><th>Enabled</th></tr></thead>
+  <tbody>
+  {% for g in groups %}
+    <tr>
+      <td><a href="/admin/groups/{{ g.id }}">{{ g.name or '(unnamed)' }}</a></td>
+      <td>{{ g.channel }}</td>
+      <td><code>{{ g.external_id }}</code></td>
+      <td>{{ g.settings.triggers | join(', ') }}</td>
+      <td class="num">{{ g.settings.confidence_threshold }}</td>
+      <td>{{ 'yes' if g.enabled else 'no' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No groups yet.</p>
+{% endif %}
+
+{% if seen %}
+<h3>Seen by the gateway, not enabled</h3>
+<p class="muted">The linked number is a member of these groups. Enabling one starts logging it.</p>
+{% for g in seen %}
+<form method="post" action="/admin/groups" class="grid">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="channel" value="whatsapp">
+  <input type="hidden" name="external_id" value="{{ g.id }}">
+  <input type="hidden" name="name" value="{{ g.subject or '' }}">
+  <span style="align-self:center">{{ g.subject or g.id }} <small class="muted">{{ g.id }}</small></span>
+  <button>Enable</button>
+</form>
+{% endfor %}
+{% endif %}
+
+<h3>Add a group by id</h3>
+<form method="post" action="/admin/groups">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="grid">
+    <label>Channel <select name="channel">{% for c in channels %}<option>{{ c }}</option>{% endfor %}</select></label>
+    <label>Id <input name="external_id" placeholder="120363012345678901@g.us" required></label>
+    <label>Name <input name="name" placeholder="Cabin crew"></label>
+  </div>
+  <button>Add</button>
+</form>
+{% endblock %}
