@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 # (env var, name, kind, model, base_url env var). Prices stay 0 until the admin
 # fills them in; model names are today's cheap defaults and can be changed.
 SEEDS = [
+    ("ANTHROPIC_API_KEY", "Claude (from .env)", "anthropic", "claude-opus-5", None),
+    ("CLAUDE_API_KEY", "Claude (from .env)", "anthropic", "claude-opus-5", None),
     ("GEMINI_API_KEY", "Gemini (from .env)", "gemini", "gemini-3.8-flash", None),
     ("OPENAI_API_KEY", "OpenAI (from .env)", "openai", "gpt-5.4-mini", None),
     ("OPENROUTER_API_KEY", "OpenRouter (from .env)", "openai", "openai/gpt-5.4-mini", "OPENROUTER_BASE_URL"),
@@ -22,9 +24,11 @@ SEEDS = [
 def run():
     env = os.environ
     if not providers.list_all():
+        seeded = set()
         for var, name, kind, model, base_var in SEEDS:
-            if not env.get(var):
+            if not env.get(var) or name in seeded:
                 continue
+            seeded.add(name)
             base_url = env.get(base_var) if base_var else None
             if base_var and not base_url:
                 base_url = "https://openrouter.ai/api/v1"

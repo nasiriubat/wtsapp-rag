@@ -103,4 +103,3 @@ def test_merge_removes_null_and_merges_nested():
 
 def test_cost_per_million_tokens():
     assert providers.cost(provider("openai"), 1_000_000, 100_000) == Decimal("2.1")
-    assert providers.cost(provider("openai"), None, 5) is None

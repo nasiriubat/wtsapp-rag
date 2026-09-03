@@ -83,12 +83,15 @@ def delete(provider_id):
 
 
 def resolve(group, global_settings):
-    """The provider a group answers with: its own, else the global default."""
-    provider_id = group["provider_id"] or global_settings["default_provider_id"]
-    if provider_id is None:
-        return None
-    provider = get(provider_id)
-    return provider if provider and provider["enabled"] else None
+    """The first enabled provider of: the group's own, then the global default.
+    A disabled pin falls back instead of blocking the group."""
+    for provider_id in (group["provider_id"], global_settings["default_provider_id"]):
+        if provider_id is None:
+            continue
+        provider = get(provider_id)
+        if provider and provider["enabled"]:
+            return provider
+    return None
 
 
 def generate(provider, system, prompt):
@@ -96,8 +99,6 @@ def generate(provider, system, prompt):
 
 
 def cost(provider, tokens_in, tokens_out):
-    if tokens_in is None or tokens_out is None:
-        return None
     per_million = Decimal(tokens_in) * Decimal(provider["price_in"]) + Decimal(tokens_out) * Decimal(
         provider["price_out"]
     )
