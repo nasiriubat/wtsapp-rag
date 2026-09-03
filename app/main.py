@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import pathlib
 import time
 import traceback
 from contextlib import asynccontextmanager
@@ -9,8 +10,10 @@ from datetime import datetime
 
 import psycopg
 from fastapi import Depends, FastAPI, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import admin
 import admin_api
 import answer
 import bootstrap
@@ -64,6 +67,12 @@ async def lifespan(app):
 app = FastAPI(lifespan=lifespan)
 app.include_router(gateway_api.router)
 app.include_router(admin_api.router)
+app.include_router(admin.public)
+app.include_router(admin.router)
+app.include_router(admin.forms)
+app.mount(
+    "/static", StaticFiles(directory=str(pathlib.Path(__file__).resolve().parent / "static")), name="static"
+)
 
 
 @app.get("/health")

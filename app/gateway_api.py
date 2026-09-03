@@ -4,7 +4,9 @@ import os
 import secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel
 
+import gateway_state
 import groups
 
 
@@ -26,3 +28,18 @@ def config():
             if g["enabled"]
         ]
     }
+
+
+class State(BaseModel):
+    connected: bool
+    jid: str | None = None
+    qr: str | None = None
+    groups: list[dict] = []  # [{id, subject}] as the channel sees them
+
+
+@router.post("/gateway/state")
+def state(body: State):
+    """The gateway reports connection state, the current QR and the groups it
+    can see. The setup wizard and the health page read it."""
+    gateway_state.update(**body.model_dump())
+    return {"ok": True}

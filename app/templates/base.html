@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Admin{% endblock %} · Group assistant</title>
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    nav.top { padding: 0 1rem; }
+    nav.top ul li a.active { font-weight: bold; text-decoration: underline; }
+    .ok { color: var(--pico-ins-color); } .bad { color: var(--pico-del-color); }
+    .muted { color: var(--pico-muted-color); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    table { font-size: 0.9rem; }
+    td.wrap { white-space: pre-wrap; max-width: 30rem; }
+    .grid.stats article { margin: 0; padding: 0.75rem 1rem; }
+    .grid.stats article strong { font-size: 1.5rem; display: block; }
+  </style>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
+<nav class="top">
+  <ul><li><strong>Group assistant</strong></li></ul>
+  <ul>
+    {% for href, label in [("/admin", "Health"), ("/admin/questions", "Questions"), ("/admin/groups", "Groups"),
+                           ("/admin/providers", "Providers"), ("/admin/cost", "Cost"), ("/admin/data", "Data")] %}
+    <li><a href="{{ href }}" class="{{ 'active' if request.url.path == href or (href != '/admin' and request.url.path.startswith(href)) else '' }}">{{ label }}</a></li>
+    {% endfor %}
+    <li><form method="post" action="/admin/logout" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline" style="padding:0.25rem 0.75rem">Log out</button></form></li>
+  </ul>
+</nav>
+<main class="container">
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

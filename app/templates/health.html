@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Health{% endblock %}
+{% block body %}
+<h2>Health</h2>
+<div class="grid stats">
+  <article>
+    {% if gateway.connected %}<strong class="ok">Linked</strong>WhatsApp as {{ gateway.jid }}
+    {% elif gateway.qr %}<strong class="bad">Not linked</strong><a href="/setup/link">Scan the QR</a>
+    {% elif gateway.reported_at %}<strong class="bad">Disconnected</strong>gateway reported at {{ gateway.reported_at | int }}
+    {% else %}<strong class="bad">No gateway</strong>nothing reported yet{% endif %}
+  </article>
+  <article><strong>{{ stats.messages }}</strong>messages, {{ stats.chunks }} chunks, {{ stats.unchunked }} waiting</article>
+  <article><strong>{{ stats.questions_today }}</strong>questions today, {{ stats.refused_today }} refused</article>
+  <article>
+    <strong>{{ '%.0f' % stats.p50 if stats.p50 else '–' }}<small> ms</small></strong>
+    answer p50 over 7 days; p95 {{ '%.0f' % stats.p95 if stats.p95 else '–' }} ms
+  </article>
+  <article>
+    <strong>{{ '%.2f' % spent }}<small> €</small></strong>
+    spent this month{% if cap %} of {{ cap }} € cap{% else %}, no global cap{% endif %}
+  </article>
+  <article><strong>{{ disk_free_gb }}<small> GB</small></strong>free disk</article>
+</div>
+
+<p class="muted">
+  Last message {{ stats.last_message.strftime('%d %b %H:%M') if stats.last_message else 'never' }},
+  last chunk {{ stats.last_chunk.strftime('%d %b %H:%M') if stats.last_chunk else 'never' }}.
+</p>
+
+<h3>Groups</h3>
+{% if groups %}
+<table>
+  <thead><tr><th>Name</th><th>Channel</th><th>Triggers</th><th>Enabled</th></tr></thead>
+  <tbody>
+  {% for g in groups %}
+    <tr>
+      <td><a href="/admin/groups/{{ g.id }}">{{ g.name or g.external_id }}</a></td>
+      <td>{{ g.channel }}</td>
+      <td>{{ g.settings.triggers | join(', ') }}</td>
+      <td>{{ 'yes' if g.enabled else 'no' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No groups yet. <a href="/setup">Run the setup</a> or add one under <a href="/admin/groups">Groups</a>.</p>
+{% endif %}
+{% endblock %}
