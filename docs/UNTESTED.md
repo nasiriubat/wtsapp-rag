@@ -13,6 +13,11 @@ recorded manual check behind it.
 - Recording our own sent message with `is_bot = true`.
 - Reconnect after a dropped socket; the logged-out path.
 - The gateway staying silent when the app returns `answer: null`.
+- Wizard steps 3 to 5 against a real link: the QR the gateway reports
+  scanning successfully, `groupFetchAllParticipating` returning the group
+  list, and the round-trip detector seeing the first real question.
+- Relink: the gateway deleting its auth state and restarting into a fresh
+  QR when the admin asks.
 
 ## Verified live (3 Sept 2026)
 

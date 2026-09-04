@@ -27,8 +27,8 @@ quote of the message it came from, or says it does not know.
 - Embeddings and the reranker run locally on CPU. No chat text leaves the box
   until the answer step.
 
-Status: v0.3 (roadmap phase 1). The admin panel and setup wizard are phase 2;
-until then configuration is a JSON API. See `ROADMAP.md`.
+Status: v0.4 (roadmap phase 2). Admin panel and setup wizard at
+`http://localhost:8000/admin`. See `ROADMAP.md`.
 
 ## Quickstart
 
@@ -39,19 +39,16 @@ key, and a phone with plain WhatsApp on a dedicated number.
 git clone https://github.com/nasiriubat/wtsapp-rag.git && cd wtsapp-rag
 cp .env.example .env         # set the passwords and secrets; see the comments
 docker compose up -d --build # first start downloads ~2.5 GB of models
-docker compose logs -f gateway
 ```
 
-Scan the QR with the phone. Send any message in the target group; the gateway
-logs `group seen` with its JID. Enable it:
+Open `http://localhost:8000/setup`, log in with `ADMIN_PASSWORD`, and follow
+the five steps: preflight, LLM key, scan the QR in the browser, tick the
+groups to enable, send `@agent hello`. The admin panel is at
+`http://localhost:8000/admin`: health, questions with feedback, group
+settings, providers, cost, data.
 
-```
-curl -u admin:$ADMIN_PASSWORD localhost:8000/api/groups -H 'content-type: application/json' \
-  -d '{"channel":"whatsapp","external_id":"<jid>","name":"My group"}'
-```
-
-The gateway picks new groups up within 30 seconds. Send `@agent hello` in the
-group. You should get a quote-reply.
+Everything the panel does is also a JSON API with HTTP Basic auth under
+`/api`, for scripts:
 
 ### Providers
 
