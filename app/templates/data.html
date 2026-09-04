@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Data{% endblock %}
-{% block subtitle %}<p class="sub">Import history, rebuild the index, erase a member, export everything.</p>{% endblock %}
+{% block subtitle %}<p class="sub">Import history, rebuild the index, erase what you no longer want kept.</p>{% endblock %}
 {% block body %}
 {% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
 
@@ -8,12 +8,13 @@
   <header><h3>What is stored</h3></header>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Group</th><th class="num">Messages</th><th>From</th><th>To</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Group</th><th class="num">Messages</th><th class="num">Questions</th><th>From</th><th>To</th><th>Actions</th></tr></thead>
       <tbody>
       {% for g in groups %}{% set c = counts.get(g.external_id) %}
         <tr>
           <td>{{ g.name or g.external_id }}</td>
           <td class="num">{{ '{:,}'.format(c.messages) if c else 0 }}</td>
+          <td class="num">{{ '{:,}'.format(questions.get(g.external_id, 0)) }}</td>
           <td class="muted">{{ c.first.strftime('%d %b %Y') if c else '–' }}</td>
           <td class="muted">{{ c.last.strftime('%d %b %Y') if c else '–' }}</td>
           <td>
@@ -23,10 +24,14 @@
                     onsubmit="return confirm('Rebuild every chunk for this group? Answers keep working meanwhile.')">
                 <input type="hidden" name="csrf" value="{{ csrf }}"><button class="outline">Re-index</button>
               </form>
+              <form method="post" action="/admin/data/messages/{{ g.id }}/delete"
+                    onsubmit="return confirm('Delete every message this group has ever sent? Uploaded files are kept. This cannot be undone.')">
+                <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Delete chats</button>
+              </form>
             </div>
           </td>
         </tr>
-      {% else %}<tr><td colspan="5" class="muted">No groups yet.</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="6" class="muted">No groups yet.</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
@@ -60,6 +65,29 @@
       <label>Sender id <input name="sender" placeholder="358401234567@s.whatsapp.net" required></label>
     </div>
     <button class="danger">Erase</button>
+  </form>
+</div>
+
+<div class="card">
+  <header><h3>Clear the question log</h3></header>
+  <p class="card-note">{{ '{:,}'.format(total_questions) }} questions are on record, each with what it retrieved,
+    what it answered and what it cost. Keeping them is how you tell whether the assistant is any good, so clear
+    them when you want the record gone, not as routine maintenance. <strong>The Cost page is computed from this
+    table</strong>, so spending history goes with it. Leave the age empty to clear everything.</p>
+  <form method="post" action="/admin/data/questions/clear"
+        onsubmit="return confirm('Delete these questions and their cost history? This cannot be undone.')">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid">
+      <label>Group
+        <select name="group_id">
+          <option value="">Every group</option>
+          {% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Older than (days) <small>empty clears all of them</small>
+        <input name="days" type="number" min="1" placeholder="90"></label>
+    </div>
+    <button class="danger">Clear</button>
   </form>
 </div>
 {% endblock %}

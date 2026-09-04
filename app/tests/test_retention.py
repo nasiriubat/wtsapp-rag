@@ -82,3 +82,50 @@ def test_retention_deletes_only_past_the_window(client):
         conn.execute("DELETE FROM messages WHERE group_id = %s", (gid,))
     assert [r["body"] for r in left] == ["new"]
     groups.delete(group["id"])
+
+
+def test_deleting_a_groups_chats_keeps_its_documents(stub_embeddings):
+    import db
+    import documents
+    import groups
+    import retention
+
+    gid = f"purge-{uuid.uuid4()}@g.us"
+    group = groups.create("whatsapp", gid, "Cabin")
+    document_id = documents.create(gid, "rules.md", "text/markdown", b"# Rules\n\nSauna on Fridays.\n")
+    documents.index_pending()
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO messages (wa_msg_id, group_id, sender_jid, body, ts) "
+            "VALUES ('m1', %s, 'a@s.whatsapp.net', 'hello', now())",
+            (gid,),
+        )
+        conn.execute(
+            "INSERT INTO chunks (group_id, content, first_msg_id, start_ts, end_ts) "
+            "VALUES (%s, 'a: hello', 'm1', now(), now())",
+            (gid,),
+        )
+
+    assert retention.purge_group_messages(gid) == 1
+    with db.connect() as conn:
+        remaining = conn.execute("SELECT document_id FROM chunks WHERE group_id = %s", (gid,)).fetchall()
+    assert [r["document_id"] for r in remaining] == [document_id]
+
+    documents.delete(document_id)
+    groups.delete(group["id"])
+
+
+def test_clearing_questions_takes_a_group_and_an_age():
+    import db
+    import retention
+
+    gid = f"log-{uuid.uuid4()}@g.us"
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO query_log (group_id, question, answer, ts) VALUES "
+            "(%s, 'old', 'a', now() - interval '100 days'), (%s, 'new', 'b', now())",
+            (gid, gid),
+        )
+    assert retention.clear_questions(gid, days=90) == 1
+    assert retention.clear_questions("someone-else@g.us") == 0
+    assert retention.clear_questions(gid) == 1

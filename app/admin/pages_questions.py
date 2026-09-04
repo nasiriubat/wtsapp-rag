@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 import admin
+import audit
 import db
 from admin import jsonl
 
@@ -64,6 +65,14 @@ def feedback(request: Request, question_id: int, value: int = Form(), note: str 
         )
     row, retrieved = _detail(question_id)
     return admin.render(request, "question_detail.html", row=row, retrieved=retrieved)
+
+
+@actions.post("/questions/{question_id}/delete")
+def delete(question_id: int):
+    with db.connect() as conn:
+        conn.execute("DELETE FROM query_log WHERE id = %s", (question_id,))
+    audit.log("question.delete", str(question_id))
+    return admin.redirect("/admin/questions", "Question deleted")
 
 
 @pages.get("/questions.jsonl")

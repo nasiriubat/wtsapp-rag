@@ -25,7 +25,19 @@ def page(request: Request, message: str | None = None):
                 "FROM messages GROUP BY group_id"
             )
         }
-    return admin.render(request, "data.html", groups=groups.list_all(), counts=counts, message=message)
+        questions = {
+            r["group_id"]: r["n"]
+            for r in conn.execute("SELECT group_id, count(*) AS n FROM query_log GROUP BY group_id")
+        }
+    return admin.render(
+        request,
+        "data.html",
+        groups=groups.list_all(),
+        counts=counts,
+        questions=questions,
+        total_questions=sum(questions.values()),
+        message=message,
+    )
 
 
 def _redirect(message):
@@ -52,10 +64,34 @@ def reembed(group_id: int):
     if group is None:
         raise HTTPException(404)
     with db.connect() as conn, conn.transaction():
-        n = conn.execute("DELETE FROM chunks WHERE group_id = %s", (group["external_id"],)).rowcount
+        n = conn.execute(
+            "DELETE FROM chunks WHERE group_id = %s AND document_id IS NULL", (group["external_id"],)
+        ).rowcount
         conn.execute("UPDATE messages SET chunked = false WHERE group_id = %s", (group["external_id"],))
     audit.log("data.reembed", group["external_id"], {"chunks": n})
     return _redirect(f"Dropped {n} chunks; rebuilding within a minute")
+
+
+@actions.post("/data/messages/{group_id}/delete")
+def delete_messages(group_id: int):
+    group = groups.get_by_id(group_id)
+    if group is None:
+        raise HTTPException(404)
+    n = retention.purge_group_messages(group["external_id"])
+    audit.log("data.purge_group", group["external_id"], {"messages": n})
+    return _redirect(f"Deleted {n} messages from {group['name'] or 'the group'}")
+
+
+@actions.post("/data/questions/clear")
+def clear_questions(group_id: str = Form(""), days: str = Form("")):
+    group = groups.get_by_id(int(group_id)) if group_id else None
+    if group_id and group is None:
+        raise HTTPException(404)
+    external_id = group["external_id"] if group else None
+    n = retention.clear_questions(external_id, int(days) if days.strip() else None)
+    audit.log("data.clear_questions", external_id or "all", {"questions": n, "older_than_days": days or None})
+    where = f"from {group['name'] or 'the group'}" if group else "from every group"
+    return _redirect(f"Deleted {n} questions {where}")
 
 
 @actions.post("/data/purge")

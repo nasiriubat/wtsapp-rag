@@ -39,3 +39,12 @@
     </div>
   </form>
 </div>
+
+<div class="card">
+  <header><h3>Danger zone</h3></header>
+  <p class="card-note">Deleting a question removes it from the log, the cost figures and the exported eval set.</p>
+  <form method="post" action="/admin/questions/{{ row.id }}/delete"
+        onsubmit="return confirm('Delete this question and its answer?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Delete this question</button>
+  </form>
+</div>

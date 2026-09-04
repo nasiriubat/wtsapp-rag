@@ -22,6 +22,30 @@ def run_once():
                 log.info("retention", extra={"table": table, "deleted": n})
 
 
+def purge_group_messages(group_external_id):
+    """Erase a group's whole chat history and everything built from it. Uploaded
+    documents survive; they were not said in the group."""
+    with db.connect() as conn, conn.transaction():
+        chunks = conn.execute(
+            "DELETE FROM chunks WHERE group_id = %s AND document_id IS NULL", (group_external_id,)
+        ).rowcount
+        conn.execute("DELETE FROM facts WHERE group_id = %s", (group_external_id,))
+        messages = conn.execute("DELETE FROM messages WHERE group_id = %s", (group_external_id,)).rowcount
+    log.info("purged group", extra={"group": group_external_id, "messages": messages, "chunks": chunks})
+    return messages
+
+
+def clear_questions(group_external_id=None, days=None):
+    """Delete the question log, for one group or all of them. The cost figures
+    are computed from this table, so they go with it."""
+    with db.connect() as conn:
+        return conn.execute(
+            "DELETE FROM query_log WHERE (%s::text IS NULL OR group_id = %s) "
+            "AND (%s::int IS NULL OR ts < now() - make_interval(days => %s::int))",
+            (group_external_id, group_external_id, days, days),
+        ).rowcount
+
+
 def purge_sender(group_external_id, sender_jid):
     """Erase one member: their messages, and every chunk built from an episode
     that contained them. The other messages of those episodes are re-chunked
