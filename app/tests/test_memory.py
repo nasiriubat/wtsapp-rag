@@ -110,6 +110,17 @@ def test_reported_membership_counts_even_without_messages(env):
     gateway_state.update("whatsapp", groups=[])
 
 
+def test_a_reported_member_list_overrides_having_written(env, monkeypatch):
+    import gateway_state
+    import providers
+
+    # Anna wrote in the group but the channel no longer lists her: she left.
+    gateway_state.update("whatsapp", connected=True, groups=[{"id": env["gid"], "members": ["someone@s"]}])
+    monkeypatch.setattr(providers, "generate", lambda *a: pytest.fail("must not answer a former member"))
+    assert ask(env, group_id=None, question="who books?")["answer"].startswith("I can only answer privately")
+    gateway_state.update("whatsapp", groups=[])
+
+
 def test_private_answers_respect_allow_dm(env):
     import groups
 

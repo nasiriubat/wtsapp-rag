@@ -128,8 +128,9 @@ def delete(group_id):
 
 def dm_candidates(sender_jid, reported_members):
     """Groups a private question may be answered from: enabled, DMs allowed,
-    and the sender is a member, either as the channel reports it or because
-    they have written there. `reported_members` maps external id to ids."""
+    and the sender is a member. Where the channel can list members that list
+    decides, so someone who has left cannot keep asking. Where it cannot
+    (Telegram, Discord), having written there is the evidence we have."""
     with db.connect() as conn:
         wrote = {
             r["group_id"]
@@ -137,12 +138,13 @@ def dm_candidates(sender_jid, reported_members):
                 "SELECT DISTINCT group_id FROM messages WHERE sender_jid = %s", (sender_jid,)
             )
         }
+
+    def member_of(external_id):
+        listed = reported_members.get(external_id)
+        return sender_jid in listed if listed else external_id in wrote
+
     return [
-        g
-        for g in list_all()
-        if g["enabled"]
-        and g["settings"]["allow_dm"]
-        and (g["external_id"] in wrote or sender_jid in reported_members.get(g["external_id"], ()))
+        g for g in list_all() if g["enabled"] and g["settings"]["allow_dm"] and member_of(g["external_id"])
     ]
 
 
