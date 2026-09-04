@@ -2,19 +2,23 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadGroups } from "../config.js";
 
-test("loadGroups sends the token and lowercases triggers", async () => {
+test("loadGroups sends the token, lowercases triggers and passes relink", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push([url, init]);
     return {
       ok: true,
-      json: async () => ({ groups: [{ external_id: "1@g.us", channel: "whatsapp", triggers: ["@Agent", "Hey"] }] }),
+      json: async () => ({
+        groups: [{ external_id: "1@g.us", channel: "whatsapp", triggers: ["@Agent", "Hey"] }],
+        relink: true,
+      }),
     };
   };
-  const groups = await loadGroups("http://app:8000", "tok");
+  const { groups, relink } = await loadGroups("http://app:8000", "tok");
   assert.equal(calls[0][0], "http://app:8000/gateway/config");
   assert.equal(calls[0][1].headers.authorization, "Bearer tok");
   assert.deepEqual(groups.get("1@g.us").triggers, ["@agent", "hey"]);
+  assert.equal(relink, true);
 });
 
 test("loadGroups throws on a rejected token so the caller keeps the old list", async () => {

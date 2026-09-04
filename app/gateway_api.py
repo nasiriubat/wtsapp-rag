@@ -26,7 +26,8 @@ def config():
             {"external_id": g["external_id"], "channel": g["channel"], "triggers": g["settings"]["triggers"]}
             for g in groups.list_all()
             if g["enabled"]
-        ]
+        ],
+        "relink": gateway_state.get()["relink"],
     }
 
 

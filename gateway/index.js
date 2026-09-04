@@ -1,4 +1,5 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
+import fs from "node:fs";
 import qrcode from "qrcode-terminal";
 import pino from "pino";
 import { bare, isTrigger, questionOf, quoteStub, textOf, toPayload } from "./lib.js";
@@ -36,15 +37,27 @@ const retryable = (status) => status === 0 || status >= 500;
 const queue = createQueue("data/queue.jsonl", async (route, body) => !retryable((await post(route, body)).status));
 setInterval(() => queue.flush().catch((err) => log.error({ err: err.message }, "queue flush failed")), 10_000);
 
+// What the app knows about us: connection, the current QR, the groups we can see.
+const state = { connected: false, jid: null, qr: null, groups: [] };
+const report = () => post("/gateway/state", state);
+
 let groups = new Map();
 async function refreshGroups() {
   try {
-    groups = await loadGroups(APP_URL, TOKEN);
+    const { groups: fresh, relink } = await loadGroups(APP_URL, TOKEN);
+    groups = fresh;
+    if (relink) {
+      // The admin asked for a new QR. Dropping the auth state and exiting lets
+      // compose restart us into a fresh pairing.
+      log.warn("relink requested; clearing auth state and restarting");
+      fs.rmSync("auth_state", { recursive: true, force: true });
+      process.exit(0);
+    }
   } catch (err) {
     log.warn({ err: err.message }, "could not load groups; keeping the previous list");
   }
 }
-setInterval(refreshGroups, 30_000);
+setInterval(() => refreshGroups().then(report), 30_000);
 
 async function ingest(payload) {
   // While older messages are waiting, go behind them so delivery stays in order.
@@ -75,10 +88,20 @@ async function answer(sock, msg, text, ownJid, triggers) {
   await ingest(toPayload(sent, ownJid));
 }
 
+async function listGroups(sock) {
+  try {
+    const all = await sock.groupFetchAllParticipating();
+    return Object.values(all).map((g) => ({ id: g.id, subject: g.subject }));
+  } catch (err) {
+    log.warn({ err: err.message }, "could not list groups");
+    return [];
+  }
+}
+
 async function connect() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth_state");
+  const { state: creds, saveCreds } = await useMultiFileAuthState("auth_state");
   const sock = makeWASocket({
-    auth: state,
+    auth: creds,
     // Baileys' info-level output drowns ours; keep only its warnings.
     logger: log.child({ module: "baileys" }, { level: "warn" }),
     // Staying "offline" keeps notifications on the phone and looks less like a bot.
@@ -88,13 +111,23 @@ async function connect() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
-    if (qr) qrcode.generate(qr, { small: true });
-    if (connection === "open") log.info({ jid: sock.user?.id, lid: sock.user?.lid }, "connected");
+  sock.ev.on("connection.update", async ({ connection, lastDisconnect, qr }) => {
+    if (qr) {
+      qrcode.generate(qr, { small: true });
+      Object.assign(state, { connected: false, qr });
+      report();
+    }
+    if (connection === "open") {
+      log.info({ jid: sock.user?.id, lid: sock.user?.lid }, "connected");
+      Object.assign(state, { connected: true, jid: bare(sock.user?.id), qr: null, groups: await listGroups(sock) });
+      report();
+    }
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
+      Object.assign(state, { connected: false });
+      report();
       if (code === DisconnectReason.loggedOut) {
-        log.fatal("logged out; delete auth_state/ and scan again");
+        log.fatal("logged out; delete auth_state/ and scan again, or use the admin's relink");
         process.exit(1);
       }
       log.warn({ code }, "connection closed, reconnecting");
@@ -130,4 +163,5 @@ async function connect() {
 }
 
 await refreshGroups();
+await report();
 connect();
