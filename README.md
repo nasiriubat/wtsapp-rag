@@ -28,7 +28,8 @@ quote of the message it came from, or says it does not know.
   supersedes the old, and answers say what changed and when. Reply "wrong,
   it's X" to an answer and the correction outranks the original.
 - Ask privately: a DM to the bot is answered from the groups you belong to,
-  with a text citation. Nothing you ask in private is stored as a message.
+  with a text citation. Private questions are never stored as group messages,
+  though like every question they appear in the admin's question log.
 - Monthly budget caps per group and globally, member opt-out, quiet hours,
   retention. Every question is logged with retrieved chunks, timings, tokens
   and cost.

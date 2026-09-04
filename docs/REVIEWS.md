@@ -3,6 +3,50 @@
 One entry per phase: what the code review and security review found, and
 what was done about it. Findings that were not fixed say why.
 
+## Phase 4 (v0.6) — code and security review, 4 Sept 2026
+
+The review ran during a model rate limit, so three of eight code-review
+angles and the security agent were cut short. The two angles that finished
+are applied below and the security questions were worked through by hand;
+the remaining angles re-run at the start of phase 5.
+
+Security pass (by hand, over the correction, DM and extraction paths):
+
+- Corrections are scoped to one group at every step: the quoted message must
+  be the bot's own **and** in that group, the answer it is corrected against
+  is looked up per group, and both the fact insert and the supersede update
+  carry `group_id`. Nothing a member writes can reach another group's facts.
+- **Fixed:** a member who had left a group could still ask about it privately
+  because they had once written there. Where the channel can list members
+  (WhatsApp) that list now decides; the "wrote here" evidence is only used
+  where the platform cannot list (Telegram, Discord).
+- Ids the model returns as `supersedes` are filtered to the candidates from
+  the same group before use, and every value reaches SQL as a parameter.
+- Private questions are never written to `messages`. They do land in
+  `query_log` with the asker's id, which the admin can read; that is stated
+  in the README's privacy note.
+- Chat text reaches the model inside `<chat>` tags with the closing tag
+  neutralised, in both the answer and extraction prompts, and both say the
+  content is data.
+
+Code review, fixed:
+
+- A private question searched the winning group twice, paying for the
+  reranker twice; the search is now passed to the answer step.
+- `query_log.record` is the single writer for that table; the correction
+  path and the extraction loop no longer hand-write their own inserts, and
+  the argument list is keyword-only instead of eleven positionals.
+- The ask log line derived "refused" from a missing quote, which is also how
+  an answer citing an imported message looks; it logs the real outcome and
+  latency now.
+- `try_correction` hit the database before checking the cheap regex.
+- Fact extraction re-embedded a chunk that already had an embedding.
+- The gateway had two schedulers plus a re-entrancy flag; one chained loop
+  cannot overlap itself, and the poll is fast only until the app answers.
+- Duplication: `embed.passage_literal`, `db.secret_key` everywhere,
+  `handleDirect` takes the channel's own payload, the wizard's relink
+  delegates to the channels page.
+
 ## Phase 3 (v0.5) — code and security review, 4 Sept 2026
 
 Security review: no high-confidence findings. Verified that every channel's
