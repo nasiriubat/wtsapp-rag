@@ -4,3 +4,5 @@ gateway/data/
 node_modules/
 __pycache__/
 .venv/
+.playwright-mcp/
+shot-*.png
