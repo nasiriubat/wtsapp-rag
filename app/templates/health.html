@@ -2,6 +2,9 @@
 {% block title %}Health{% endblock %}
 {% block body %}
 <h2>Health</h2>
+{% if db_error %}
+<p class="bad">Postgres is not answering: {{ db_error }}</p>
+{% else %}
 <div class="grid stats">
   <article>
     {% if gateway.connected %}<strong class="ok">Linked</strong>WhatsApp as {{ gateway.jid }}
@@ -16,10 +19,10 @@
     answer p50 over 7 days; p95 {{ '%.0f' % stats.p95 if stats.p95 else '–' }} ms
   </article>
   <article>
-    <strong>{{ '%.2f' % spent }}<small> €</small></strong>
+    <strong>{{ '%.2f' % stats.spent }}<small> €</small></strong>
     spent this month{% if cap %} of {{ cap }} € cap{% else %}, no global cap{% endif %}
   </article>
-  <article><strong>{{ disk_free_gb }}<small> GB</small></strong>free disk</article>
+  <article><strong>{{ disk_free_gb }}<small> GB</small></strong>free where models live</article>
 </div>
 
 <p class="muted">
@@ -44,5 +47,6 @@
 </table>
 {% else %}
 <p>No groups yet. <a href="/setup">Run the setup</a> or add one under <a href="/admin/groups">Groups</a>.</p>
+{% endif %}
 {% endif %}
 {% endblock %}

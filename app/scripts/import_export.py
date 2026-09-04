@@ -123,7 +123,8 @@ def insert(group_id, messages):
                 """,
                 rows,
             )
-    return len(rows)
+            # Rows actually written; re-imports report 0, not the file length.
+            return cur.rowcount
 
 
 if __name__ == "__main__":

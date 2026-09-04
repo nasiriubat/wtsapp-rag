@@ -155,7 +155,7 @@ def _cite(text, src):
     return text, quote
 
 
-def _log_question(q, chunks, timings, text, confidence, tokens, provider, cost, latency_ms):
+def _log_question(q, chunks, timings, text, confidence, tokens, provider, cost, latency_ms, outcome):
     retrieved = {
         "chunks": [{"chunk_id": c["id"], "score": c["score"], "source": c["source"]} for c in chunks],
         "timings": timings,
@@ -165,8 +165,8 @@ def _log_question(q, chunks, timings, text, confidence, tokens, provider, cost, 
             """
             INSERT INTO query_log
               (group_id, sender_jid, question, retrieved, answer, confidence,
-               tokens_in, tokens_out, latency_ms, provider_id, cost)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               tokens_in, tokens_out, latency_ms, provider_id, cost, outcome)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 q.group_id,
@@ -180,6 +180,7 @@ def _log_question(q, chunks, timings, text, confidence, tokens, provider, cost, 
                 latency_ms,
                 provider["id"] if provider else None,
                 cost,
+                outcome,
             ),
         )
 
@@ -228,5 +229,5 @@ def ask(q: Question):
             "outcome": outcome,
         },
     )
-    _log_question(q, chunks, timings, text, confidence, tuple(tokens), provider, cost, latency_ms)
+    _log_question(q, chunks, timings, text, confidence, tuple(tokens), provider, cost, latency_ms, outcome)
     return {"answer": text, "quote": quote}

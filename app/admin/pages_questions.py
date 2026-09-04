@@ -1,18 +1,18 @@
-import json
-
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse
 
 import admin
 import db
+from admin import jsonl
 
 pages = APIRouter()
 actions = APIRouter()
 
 FILTERS = {
     "all": "TRUE",
-    "answered": "cost IS NOT NULL",
-    "refused": "cost IS NULL",
+    "answered": "outcome = 'answered'",
+    "refused": "outcome = 'refused'",
+    "other": "outcome NOT IN ('answered', 'refused')",
     "negative": "feedback = -1",
     "low": "confidence < 0.3",
 }
@@ -26,10 +26,10 @@ def index(request: Request, filter: str = "all", before: int | None = None):
             f"""
             SELECT q.*, g.name AS group_name FROM query_log q
             LEFT JOIN groups g ON g.external_id = q.group_id
-            WHERE {where} AND (%s::bigint IS NULL OR q.id < %s)
+            WHERE {where} AND (%(before)s::bigint IS NULL OR q.id < %(before)s)
             ORDER BY q.id DESC LIMIT 50
             """,
-            (before, before),
+            {"before": before},
         ).fetchall()
     return admin.render(request, "questions.html", rows=rows, filter=filter, filters=FILTERS)
 
@@ -39,13 +39,12 @@ def _detail(question_id):
         row = conn.execute("SELECT * FROM query_log WHERE id = %s", (question_id,)).fetchone()
         if row is None:
             raise HTTPException(404)
-        ids = [c["chunk_id"] for c in (row["retrieved"] or {}).get("chunks", [])]
+        hits = (row["retrieved"] or {}).get("chunks", [])
         chunks = conn.execute(
-            "SELECT id, content, start_ts FROM chunks WHERE id = ANY(%s)", (ids,)
+            "SELECT id, content, start_ts FROM chunks WHERE id = ANY(%s)", ([c["chunk_id"] for c in hits],)
         ).fetchall()
     by_id = {c["id"]: c for c in chunks}
-    retrieved = [{**c, "chunk": by_id.get(c["chunk_id"])} for c in (row["retrieved"] or {}).get("chunks", [])]
-    return row, retrieved
+    return row, [{**c, "chunk": by_id.get(c["chunk_id"])} for c in hits]
 
 
 @pages.get("/questions/{question_id}", response_class=HTMLResponse)
@@ -70,14 +69,9 @@ def feedback(request: Request, question_id: int, value: int = Form(), note: str 
 @pages.get("/questions.jsonl")
 def export():
     """Every question with its outcome and feedback: the eval set."""
-
-    def lines():
-        with db.connect() as conn:
-            for r in conn.execute(
-                "SELECT id, ts, group_id, question, answer, confidence, feedback, feedback_note, retrieved "
-                "FROM query_log ORDER BY id"
-            ):
-                yield json.dumps(r, default=str) + "\n"
-
-    headers = {"content-disposition": "attachment; filename=questions.jsonl"}
-    return StreamingResponse(lines(), media_type="application/x-ndjson", headers=headers)
+    return jsonl.stream(
+        "SELECT id, ts, group_id, question, answer, outcome, confidence, feedback, feedback_note, "
+        "retrieved FROM query_log ORDER BY id",
+        (),
+        "questions.jsonl",
+    )

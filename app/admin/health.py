@@ -1,5 +1,7 @@
+import os
 import shutil
 
+import psycopg
 from fastapi import Request
 
 import admin
@@ -10,39 +12,48 @@ import groups
 
 
 def stats():
+    """One statement for everything the health card shows."""
     with db.connect() as conn:
-        counts = conn.execute(
-            """
+        return conn.execute(
+            f"""
             SELECT (SELECT count(*) FROM messages) AS messages,
                    (SELECT count(*) FROM chunks) AS chunks,
                    (SELECT count(*) FROM messages WHERE NOT chunked) AS unchunked,
                    (SELECT max(ts) FROM messages) AS last_message,
-                   (SELECT max(end_ts) FROM chunks) AS last_chunk,
-                   (SELECT count(*) FROM query_log WHERE ts > now() - interval '1 day') AS questions_today,
-                   (SELECT count(*) FROM query_log WHERE ts > now() - interval '1 day'
-                      AND answer IS NOT NULL AND cost IS NULL) AS refused_today
+                   (SELECT end_ts FROM chunks ORDER BY id DESC LIMIT 1) AS last_chunk,
+                   t.questions_today, t.refused_today, w.p50, w.p95, m.spent
+            FROM (SELECT count(*) AS questions_today,
+                         count(*) FILTER (WHERE outcome = 'refused') AS refused_today
+                  FROM query_log WHERE ts > now() - interval '1 day') t,
+                 (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50,
+                         percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95
+                  FROM query_log WHERE ts > now() - interval '7 days') w,
+                 (SELECT coalesce(sum(cost), 0) AS spent FROM query_log WHERE {budget.MONTH_SQL}) m
             """
         ).fetchone()
-        latency = conn.execute(
-            """
-            SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50,
-                   percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95
-            FROM query_log WHERE ts > now() - interval '7 days'
-            """
-        ).fetchone()
-    return {**counts, **latency}
 
 
+def disk_free_gb():
+    # /models holds the downloaded models; the database has its own volume and
+    # reports through pg_database_size on the health JSON.
+    return round(shutil.disk_usage("/models" if os.path.isdir("/models") else "/").free / 1e9, 1)
+
+
+@admin.router.get("")
 def page(request: Request):
-    _, spent = budget.spent_this_month("")
-    disk = shutil.disk_usage("/")
+    try:
+        s = stats()
+    except psycopg.Error as e:
+        return admin.render(
+            request, "health.html", db_error=str(e).strip(), stats=None, gateway=gateway_state.get()
+        )
     return admin.render(
         request,
         "health.html",
-        stats=stats(),
+        db_error=None,
+        stats=s,
         gateway=gateway_state.get(),
         groups=groups.list_all(),
-        spent=spent,
         cap=groups.global_settings()["monthly_cap_eur"],
-        disk_free_gb=round(disk.free / 1e9, 1),
+        disk_free_gb=disk_free_gb(),
     )
