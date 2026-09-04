@@ -3,6 +3,61 @@
 One entry per phase: what the code review and security review found, and
 what was done about it. Findings that were not fixed say why.
 
+## Phase 3 (v0.5) — code and security review, 4 Sept 2026
+
+Security review: no high-confidence findings. Verified that every channel's
+`send` targets the chat the question came from and that quote ids only pick
+the message to reply to; retrieval is scoped by group; tokens leave the app
+only over the gateway token. Two low notes fixed anyway: Discord answers no
+longer parse `@everyone` or user pings (`allowedMentions: parse: []`), and
+message ids are unique per group (migration 007) so a WhatsApp sender
+choosing its own id cannot shadow a Telegram message.
+
+Code review, fixed:
+
+- The Channels page's Remove button sat inside the Save form; browsers drop
+  the inner form, so it saved instead of removing. Forms are siblings now.
+- The 30-second sync could start a channel twice when a start took longer
+  than a tick; a `syncing` guard and parallel starts.
+- Telegram's handler awaited the whole answer, blocking grammY's sequential
+  polling for every other group; fire and forget like WhatsApp.
+- A Telegram poller that died (409, revoked token) stayed in `running`
+  forever; channels expose `dead()` and the orchestrator restarts them.
+- A phone-side WhatsApp logout exited the whole process, taking Telegram and
+  Discord down; it now clears the auth files and pairs again in place.
+- Stopped or removed channels never reported a final state, so the panel
+  showed "linked" forever; the orchestrator reports a blank state on stop.
+- Relink was a global flag consumed by any config fetch even with no running
+  WhatsApp; it is per channel, handed out once, and the wizard's "asking for
+  a fresh QR" branch reads it again. Relink is refused until the socket is
+  open, so a request during a restart no longer wedges the flag.
+- Health and preflight read WhatsApp-only state; a Telegram-only install
+  looked dead. They read all channels; the wizard's link step is explicitly
+  the phone pairing.
+- Discord fetched the referenced message for every reply before ingest;
+  cheap checks run first and the fetch happens only when they miss. Trigger
+  work runs after ingest for every channel.
+- Telegram answers over 4096 characters threw; truncated like Discord.
+- Discord's channel list was frozen at connect; recomputed per report.
+- The gateway did nothing until the first config fetch succeeded, which
+  under compose is well after boot; it polls every 5 s until then.
+- Tests wrote to the real `data/queue.jsonl`; the queue path is injectable.
+- `TELEGRAM_BOT_TOKEN`/`DISCORD_BOT_TOKEN` in `.env` contradicted the rule
+  that admin-owned config lives in Postgres; removed.
+- Duplication: one `KINDS` table with traits (token, pairs) replaces three
+  copies; `db.secret_key()` is the one key accessor; `audit.redact` knows
+  `token`; `admin.redirect` is the one flash helper; parse helpers next to
+  the id encoders; `blankState()` shared.
+
+Recorded, not changed:
+
+- `wa_msg_id` is the column name for every channel's message id. Renaming
+  is a migration across four tables; deferred to v1.x.
+- `SECRET_KEY` signs sessions, derives CSRF tokens and encrypts secrets.
+  Splitting it is a v1.x hardening item.
+- The SQL `CHECK` on `channels.kind` duplicates `KINDS`; kept as a data
+  guard, so a new kind is a migration plus a module.
+
 ## Phase 2 (v0.4) — code and security review, 4 Sept 2026
 
 Security review (eight categories, whole `ca10a66..HEAD` range): no
