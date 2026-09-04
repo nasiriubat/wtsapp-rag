@@ -28,10 +28,10 @@
 {% for g in seen %}
 <form method="post" action="/admin/groups" class="grid">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <input type="hidden" name="channel" value="whatsapp">
+  <input type="hidden" name="channel" value="{{ g.channel }}">
   <input type="hidden" name="external_id" value="{{ g.id }}">
   <input type="hidden" name="name" value="{{ g.subject or '' }}">
-  <span style="align-self:center">{{ g.subject or g.id }} <small class="muted">{{ g.id }}</small></span>
+  <span style="align-self:center">{{ g.subject or g.id }} <small class="muted">{{ g.channel }} · {{ g.id }}</small></span>
   <button>Enable</button>
 </form>
 {% endfor %}

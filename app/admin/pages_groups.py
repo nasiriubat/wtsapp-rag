@@ -17,7 +17,7 @@ actions = APIRouter()
 def index(request: Request):
     rows = groups.list_all()
     known = {g["external_id"] for g in rows}
-    seen = [g for g in gateway_state.get()["groups"] if g["id"] not in known]
+    seen = [g for g in gateway_state.seen_groups() if g["id"] not in known]
     return admin.render(request, "groups.html", groups=rows, seen=seen, channels=groups.CHANNELS)
 
 

@@ -6,6 +6,7 @@ import secrets
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
+import channels
 import gateway_state
 import groups
 
@@ -22,6 +23,11 @@ router = APIRouter(dependencies=[Depends(require_token)])
 @router.get("/gateway/config")
 def config():
     return {
+        "channels": [
+            {"kind": c["kind"], "config": c["config"]}
+            for c in channels.list_all(with_config=True)
+            if c["enabled"]
+        ],
         "groups": [
             {"external_id": g["external_id"], "channel": g["channel"], "triggers": g["settings"]["triggers"]}
             for g in groups.list_all()
@@ -37,6 +43,7 @@ class SeenGroup(BaseModel):
 
 
 class State(BaseModel):
+    channel: str = "whatsapp"
     connected: bool
     jid: str | None = None
     qr: str | None = None
@@ -45,5 +52,7 @@ class State(BaseModel):
 
 @router.post("/gateway/state")
 def state(body: State):
+    if body.channel not in channels.KINDS:
+        raise HTTPException(422, "unknown channel")
     gateway_state.update(**body.model_dump())
     return {"ok": True}

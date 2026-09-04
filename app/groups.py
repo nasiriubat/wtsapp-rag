@@ -11,7 +11,7 @@ import db
 import retention
 
 REFUSAL = "I don't have anything on that."
-CHANNELS = ("whatsapp",)
+CHANNELS = ("whatsapp", "telegram", "discord")
 
 
 class QuietHours(BaseModel):
