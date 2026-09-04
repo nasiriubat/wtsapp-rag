@@ -1,9 +1,10 @@
 # Roadmap to v1.0 — production-ready, audited
 
-Status (4 Sept 2026): phases 0 to 2 done and reviewed; all four provider
-kinds verified live; the panel checked in a real browser. Phase 3 (channel
-adapter, Telegram, Discord) built; review pending; live test needs bot
-tokens. Next: phase 4, memory quality.
+Status (4 Sept 2026): phases 0 to 3 done and reviewed; all four provider
+kinds verified live; the panel checked in a real browser; Telegram and
+Discord await bot tokens for a live test. Phase 4 (facts with supersession,
+correction loop, DM mode, prompt hardening) built; review pending. Next:
+phase 5, eval and load test.
 
 v0.1 (Sept 2026) proved the loop: log a group, hybrid-search it, answer with a
 quote-reply, refuse when unsure, log everything. v1.0 turns that into a system

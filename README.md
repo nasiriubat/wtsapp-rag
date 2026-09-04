@@ -24,6 +24,11 @@ quote of the message it came from, or says it does not know.
 - Channels: WhatsApp (paired phone), Telegram (bot token) and Discord (bot
   token), all through one gateway, mixed freely across groups. Set them up
   on the Channels page; the gateway picks changes up within 30 seconds.
+- Decisions with history: each chunk is mined for decisions; a newer one
+  supersedes the old, and answers say what changed and when. Reply "wrong,
+  it's X" to an answer and the correction outranks the original.
+- Ask privately: a DM to the bot is answered from the groups you belong to,
+  with a text citation. Nothing you ask in private is stored as a message.
 - Monthly budget caps per group and globally, member opt-out, quiet hours,
   retention. Every question is logged with retrieved chunks, timings, tokens
   and cost.

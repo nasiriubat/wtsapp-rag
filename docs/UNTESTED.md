@@ -19,6 +19,11 @@ recorded manual check behind it.
 - Relink: the gateway logging out in process, clearing its auth files and
   pairing again with a fresh QR when the admin asks.
 
+- Private messages on WhatsApp: the DM branch in the gateway (LID and phone
+  JIDs), the member lists from `groupFetchAllParticipating`, and the
+  correction reply flow (quoting a bot message then replying "wrong, …").
+  The app side of all three is covered by tests through `/ask`.
+
 ## Needs a Telegram or Discord bot token
 
 - Telegram and Discord channels end to end: connecting, seeing groups,
