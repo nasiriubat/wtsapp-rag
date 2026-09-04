@@ -56,6 +56,15 @@ def test_newer_decision_supersedes_and_search_shows_history(group):
     assert "Kuusamo" in text and "replaces" in text and "Rovaniemi" in text
 
 
+def test_restating_an_active_fact_adds_nothing(group):
+    import facts
+
+    gid = group["external_id"]
+    first = facts.add(gid, "Mikko books the cabin", "decision", "m1", NOW)
+    assert facts.add(gid, "Mikko books the cabin.", "decision", "m2", NOW) is None
+    assert facts.add(gid, "Sara books the cabin", "decision", "m3", NOW, supersedes=[first]) is not None
+
+
 def test_supersedes_only_own_groups_active_facts(group):
     import facts
 
