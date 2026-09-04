@@ -1,11 +1,10 @@
 """Admin JSON API. One admin, HTTP Basic, every write audited. The panel
 calls the same add/apply helpers, so validation lives here once."""
 
-import os
 import secrets
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, ValidationError
 
@@ -14,14 +13,15 @@ import channels
 import db
 import groups
 import providers
+from admin import auth
 
 basic = HTTPBasic()
 
 
-def require_admin(creds: HTTPBasicCredentials = Depends(basic)):
+def require_admin(request: Request, creds: HTTPBasicCredentials = Depends(basic)):
+    # Same lockout as the panel: this must not be an unthrottled password oracle.
     ok_user = secrets.compare_digest(creds.username.encode(), b"admin")
-    ok_pass = secrets.compare_digest(creds.password.encode(), os.environ["ADMIN_PASSWORD"].encode())
-    if not (ok_user and ok_pass):
+    if not (ok_user and auth.check_password(creds.password, request.client.host if request.client else "?")):
         raise HTTPException(401, "admin credentials required", headers={"WWW-Authenticate": "Basic"})
 
 

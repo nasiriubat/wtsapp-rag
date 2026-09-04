@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from conftest import GW, needs_db, post
 
@@ -35,6 +37,47 @@ def test_the_channels_page_renders_every_secret_field(browser, clean):
     assert "Phone number id" in page and "App secret" in page and "24-hour window" in page
     res = post(browser, "/admin/channels/whatsapp_cloud", token="t", enabled="true")
     assert res.status_code == 422  # the other three are missing
+
+
+def test_the_admin_api_shares_the_panels_login_lockout():
+    import pytest as _pytest
+
+    from admin import auth
+
+    who = f"client-{uuid.uuid4()}"
+    for _ in range(5):
+        assert auth.check_password("wrong", who) is False
+    with _pytest.raises(Exception, match="too many attempts"):
+        auth.check_password("wrong", who)
+
+
+def test_chunking_only_flags_its_own_groups_messages(client, monkeypatch):
+    import chunking
+    import db
+    import embed
+    import groups
+
+    monkeypatch.setattr(embed, "passages", lambda texts: [[0.1] * 384 for _ in texts])
+    # The same message id in two groups: WhatsApp lets a sender choose it.
+    a, b = (groups.create("whatsapp", f"test-{uuid.uuid4()}@g.us") for _ in range(2))
+    ids = (a["external_id"], b["external_id"])
+    with db.connect() as conn:
+        for external_id in ids:
+            conn.execute(
+                "INSERT INTO messages (wa_msg_id, group_id, sender_jid, sender_name, body, ts) "
+                "VALUES ('shared-id', %s, '1@s', 'Anna', 'hello there everyone', now() - interval '2 days')",
+                (external_id,),
+            )
+    chunking.run_once()
+    with db.connect() as conn:
+        # Unscoped, the first group's pass flagged the second's message too and
+        # it was never embedded: one chunk instead of two.
+        chunks = conn.execute("SELECT group_id FROM chunks WHERE group_id IN (%s, %s)", ids).fetchall()
+        conn.execute("DELETE FROM chunks WHERE group_id IN (%s, %s)", ids)
+        conn.execute("DELETE FROM messages WHERE wa_msg_id = 'shared-id'")
+    assert {c["group_id"] for c in chunks} == set(ids)
+    groups.delete(a["id"])
+    groups.delete(b["id"])
 
 
 def test_whatsapp_row_exists_after_migration(client):

@@ -128,6 +128,18 @@ def test_private_answers_respect_allow_dm(env):
     assert ask(env, group_id=None, question="who books?")["answer"].startswith("I can only answer privately")
 
 
+def test_private_answers_respect_opt_out_and_quiet_hours(env):
+    import groups
+
+    groups.update(env["group"]["id"], settings={**env["group"]["settings"], "opt_out": ["anna@s"]})
+    assert ask(env, group_id=None, question="who books?")["answer"].startswith("I can only answer privately")
+    groups.update(
+        env["group"]["id"],
+        settings={**env["group"]["settings"], "quiet_hours": {"start": "00:00", "end": "23:59", "tz": "UTC"}},
+    )
+    assert ask(env, group_id=None, question="who books?")["answer"].startswith("I can only answer privately")
+
+
 def test_best_source_picks_the_message_the_answer_came_from():
     import asking
 

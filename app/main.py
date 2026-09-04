@@ -83,8 +83,11 @@ def health(response: Response):
             last = conn.execute("SELECT end_ts FROM chunks ORDER BY id DESC LIMIT 1").fetchone()
             pending = conn.execute("SELECT count(*) AS n FROM messages WHERE NOT chunked").fetchone()["n"]
     except psycopg.Error as e:
+        # The detail names the host, port and user; that goes to the log, which
+        # is authenticated, not to an endpoint anyone can call.
+        log.error("health check failed", extra={"err": str(e).strip()})
         response.status_code = 503
-        return {"db": "down", "error": str(e).strip()}
+        return {"db": "down"}
     return {"db": "ok", "last_chunk_ts": last["end_ts"] if last else None, "unchunked_messages": pending}
 
 

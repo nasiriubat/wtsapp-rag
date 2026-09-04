@@ -62,5 +62,6 @@ async def require_csrf(request: Request):
     ):
         form = await request.form()
         sent = form.get("csrf")
-    if not sent or not hmac.compare_digest(sent, csrf_token(request)):
+    # Bytes, not str: compare_digest raises on a non-ASCII header.
+    if not sent or not hmac.compare_digest(str(sent).encode(), csrf_token(request).encode()):
         raise HTTPException(403, "bad csrf token")

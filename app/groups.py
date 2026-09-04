@@ -147,8 +147,16 @@ def dm_candidates(sender_jid, reported_members):
         listed = reported_members.get(external_id)
         return sender_jid in listed if listed else external_id in wrote
 
+    # A private question is still a question from this group: opting out and
+    # quiet hours silence it here too.
     return [
-        g for g in list_all() if g["enabled"] and g["settings"]["allow_dm"] and member_of(g["external_id"])
+        g
+        for g in list_all()
+        if g["enabled"]
+        and g["settings"]["allow_dm"]
+        and sender_jid not in g["settings"]["opt_out"]
+        and not in_quiet_hours(g["settings"])
+        and member_of(g["external_id"])
     ]
 
 

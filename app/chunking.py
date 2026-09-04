@@ -70,8 +70,10 @@ def run_once():
                             embed.literal(vec),
                         ),
                     )
+                    # Scoped: message ids are unique per group, not globally, so
+                    # an id chosen in one group must not flag another's message.
                     conn.execute(
-                        "UPDATE messages SET chunked = true WHERE wa_msg_id = ANY(%s)",
-                        ([m["wa_msg_id"] for m in ep],),
+                        "UPDATE messages SET chunked = true WHERE group_id = %s AND wa_msg_id = ANY(%s)",
+                        (group_id, [m["wa_msg_id"] for m in ep]),
                     )
             log.info("chunked", extra={"group": group_id, "episodes": len(eps)})
