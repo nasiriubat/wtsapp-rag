@@ -51,7 +51,8 @@ Telegram: create the bot with @BotFather, run `/setprivacy` → Disable so it
 sees every group message, add it to the group. Discord: create an
 application, add a bot, enable the Message Content intent, invite it with
 Read Messages, Send Messages and Read Message History. Paste the tokens on
-the Channels page, then enable the groups that appear.
+the Channels page, then enable the groups that appear. Step by step, with
+links, in [docs/SETUP.md](docs/SETUP.md#4-connect-a-channel).
 
 ## Quickstart
 
@@ -65,10 +66,15 @@ docker compose up -d --build # first start downloads ~2.5 GB of models
 ```
 
 Open `http://localhost:8000/setup`, log in with `ADMIN_PASSWORD`, and follow
-the five steps: preflight, LLM key, scan the QR in the browser, tick the
+the five steps: system check, model key, scan the QR in the browser, tick the
 groups to enable, send `@agent hello`. The admin panel is at
 `http://localhost:8000/admin`: health, questions with feedback, group
-settings, providers, cost, data.
+settings, providers, channels, cost, data.
+
+**[docs/SETUP.md](docs/SETUP.md) is the full walkthrough**, including where
+each credential comes from: which console page issues an Anthropic, Gemini,
+OpenAI or OpenRouter key, the BotFather and Discord developer portal steps,
+Meta's Cloud API flow, and how to change or remove a connection later.
 
 Everything the panel does is also a JSON API with HTTP Basic auth under
 `/api`, for scripts:
