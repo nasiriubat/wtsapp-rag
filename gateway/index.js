@@ -15,6 +15,10 @@ if (!TOKEN) {
   process.exit(1);
 }
 
+// One channel must never take the others down with it.
+process.on("unhandledRejection", (err) => log.error({ err: err?.message }, "unhandled rejection"));
+process.on("uncaughtException", (err) => log.error({ err: err?.message }, "uncaught exception"));
+
 const MODULES = { whatsapp, telegram, discord, whatsapp_cloud: whatsappCloud };
 const core = createCore({ appUrl: APP_URL, token: TOKEN, log });
 const running = new Map();

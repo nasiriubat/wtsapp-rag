@@ -59,7 +59,12 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
   // pay for it on chatter. `send(text, quote)` returns the payload of the
   // message the channel sent, or null.
   async function handle(payload, { trigger, send }) {
-    log.info(payload, "message");
+    // Metadata only: the logs must not become a plaintext copy of the chat.
+    log.info(
+      { wa_msg_id: payload.wa_msg_id, group_id: payload.group_id, sender_jid: payload.sender_jid,
+        chars: (payload.body ?? "").length },
+      "message",
+    );
     const ingested = ingest(payload);
     const question = await trigger();
     if (question === null || question === undefined) return ingested;

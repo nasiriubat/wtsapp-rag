@@ -73,7 +73,9 @@ export async function start(core, config, log) {
     if (!res.ok) log.error({ status: res.status, body: (await res.text()).slice(0, 300) }, "cloud send failed");
   }
 
-  const server = http.createServer(async (req, res) => {
+  async function handle(req, res) {
+    // A malformed target or a truncated body throws here, and this listener is
+    // public by design: without the catch below one packet ends the process.
     const url = new URL(req.url, "http://localhost");
     if (url.pathname !== PATH) return res.writeHead(404).end();
     if (req.method === "GET") {
@@ -100,6 +102,14 @@ export async function start(core, config, log) {
         .handleDirect(payload, (answer) => send(payload.sender_jid.split("@")[0], answer))
         .catch((err) => log.error({ err: err.message }, "cloud handle failed"));
     }
+  }
+
+  const server = http.createServer((req, res) => {
+    handle(req, res).catch((err) => {
+      log.warn({ err: err.message }, "cloud webhook request failed");
+      if (!res.headersSent) res.writeHead(400);
+      res.end();
+    });
   });
 
   await new Promise((resolve, reject) => {
