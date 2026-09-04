@@ -9,7 +9,7 @@ import groups
 def test_settings_defaults():
     s = groups.Settings().model_dump()
     assert s["triggers"] == ["@agent"]
-    assert s["confidence_threshold"] == 0.1
+    assert s["confidence_threshold"] == 0.0
     assert s["refusal_text"] == groups.REFUSAL
     assert s["retention_days"] is None
 

@@ -128,6 +128,24 @@ def test_private_answers_respect_allow_dm(env):
     assert ask(env, group_id=None, question="who books?")["answer"].startswith("I can only answer privately")
 
 
+def test_best_source_picks_the_message_the_answer_came_from():
+    import asking
+
+    episode = [
+        {"wa_msg_id": "m6", "body": "Who is bringing the sauna stove wood?"},
+        {"wa_msg_id": "m7", "body": "I have half a cubic metre in the garage, I will bring it."},
+        {"wa_msg_id": "m8", "body": "Great, Sara brings the food."},
+    ]
+    assert (
+        asking.best_source(episode, "Mikko brings half a cubic metre of wood from his garage.")["wa_msg_id"]
+        == "m7"
+    )
+    assert asking.best_source(episode, "Sara brings the food.")["wa_msg_id"] == "m8"
+    # Nothing in common: the episode's first message, as before.
+    assert asking.best_source(episode, "täysin eri asia")["wa_msg_id"] == "m6"
+    assert asking.best_source([], "x") is None
+
+
 def test_chat_content_cannot_close_the_chat_tag():
     import answer
 

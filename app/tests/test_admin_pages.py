@@ -66,7 +66,8 @@ def test_group_settings_form_roundtrip_and_threshold_stat(browser):
             )
 
     page = browser.get(f"/admin/groups/{group_id}").text
-    assert "Cabin" in page and "33% of the last 3 questions" in page
+    # The default threshold is 0, so nothing would have been refused.
+    assert "Cabin" in page and "0% of the last 3 questions" in page
     frag = browser.get(f"/admin/groups/{group_id}/threshold?value=0.6").text
     assert "67% of the last 3 questions" in frag
 

@@ -37,7 +37,11 @@ class QuietHours(BaseModel):
 
 class Settings(BaseModel):
     triggers: list[str] = ["@agent"]
-    confidence_threshold: float = Field(0.1, ge=0, le=1)
+    # 0 means every question reaches the model, which decides whether the
+    # excerpts answer it. The reranker's score is not comparable across
+    # languages, so gating on it refused 44% of answerable questions in the
+    # eval; raise this only to save provider calls. See docs/EVAL.md.
+    confidence_threshold: float = Field(0.0, ge=0, le=1)
     refusal_text: str = REFUSAL
     answer_language: str = "auto"  # or a language name the model understands
     retention_days: int | None = Field(None, ge=1)

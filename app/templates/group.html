@@ -20,7 +20,7 @@
   <h4>Answering</h4>
   <label>Triggers <small class="muted">comma-separated prefixes; a mention or a reply to the bot always triggers</small>
     <input name="triggers" value="{{ s.triggers | join(', ') }}"></label>
-  <label>Confidence threshold <small class="muted">below this the bot refuses without calling the LLM</small>
+  <label>Confidence threshold <small class="muted">below this the bot refuses without calling the LLM. 0 lets the model decide, which the eval shows is more accurate; raise it only to save provider calls</small>
     <input name="confidence_threshold" type="range" min="0" max="1" step="0.01" value="{{ s.confidence_threshold }}"
            oninput="this.nextElementSibling.value = this.value"
            hx-get="/admin/groups/{{ group.id }}/threshold" hx-trigger="input changed delay:300ms" hx-target="#threshold-stat" hx-include="this" hx-vals='js:{value: event.target.value}'>
