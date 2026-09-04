@@ -1,7 +1,7 @@
 import io
 
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 
 import admin
 import audit
@@ -29,7 +29,7 @@ def page(request: Request, message: str | None = None):
 
 
 def _redirect(message):
-    return RedirectResponse(f"/admin/data?message={message.replace(' ', '+')}", status_code=303)
+    return admin.redirect("/admin/data", message)
 
 
 @actions.post("/data/import")

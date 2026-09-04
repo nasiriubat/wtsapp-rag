@@ -5,7 +5,6 @@ become rows. After that they are ignored."""
 import logging
 import os
 
-import channels
 import groups
 import providers
 
@@ -37,10 +36,6 @@ def run():
             if groups.global_settings()["default_provider_id"] is None:
                 groups.set_global(default_provider_id=p["id"])
             log.info("bootstrapped provider from env; set its prices in the admin", extra={"provider": name})
-    for var, kind in (("TELEGRAM_BOT_TOKEN", "telegram"), ("DISCORD_BOT_TOKEN", "discord")):
-        if env.get(var) and channels.get(kind) is None:
-            channels.upsert(kind, {"token": env[var]})
-            log.info("bootstrapped channel from env", extra={"channel": kind})
     if env.get("GROUP_JID") and not groups.list_all():
         settings = {}
         if env.get("TRIGGERS"):

@@ -2,9 +2,11 @@ import json
 
 import db
 
+SECRET_KEYS = {"api_key", "token"}
+
 
 def redact(detail):
-    return {k: ("***" if k == "api_key" else v) for k, v in detail.items()}
+    return {k: ("***" if k in SECRET_KEYS else v) for k, v in detail.items()}
 
 
 def log(action, target, detail=None):

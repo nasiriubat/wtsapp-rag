@@ -10,6 +10,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, ValidationError
 
 import audit
+import channels
 import db
 import groups
 import providers
@@ -144,8 +145,8 @@ class GroupPatch(BaseModel):
 
 def add_group(fields):
     body = _validate(GroupIn, fields)
-    if body.channel not in groups.CHANNELS:
-        raise HTTPException(422, f"channel must be one of {groups.CHANNELS}")
+    if body.channel not in channels.KINDS:
+        raise HTTPException(422, f"channel must be one of {sorted(channels.KINDS)}")
     external_id = body.external_id.strip()
     if not external_id:
         raise HTTPException(422, "id is required")

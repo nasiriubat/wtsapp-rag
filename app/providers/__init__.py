@@ -1,7 +1,6 @@
 """LLM providers: stored encrypted in Postgres, one function shape for all kinds."""
 
 import json
-import os
 from decimal import Decimal
 
 import db
@@ -13,8 +12,7 @@ KINDS = {"anthropic": anthropic, "gemini": gemini, "openai": openai_compat}
 _COLUMNS = "id, name, kind, base_url, model, price_in, price_out, options, enabled, created_at"
 
 
-def _key():
-    return os.environ["SECRET_KEY"]
+_key = db.secret_key
 
 
 def get(provider_id):

@@ -45,14 +45,14 @@ def page(request: Request):
         s = stats()
     except psycopg.Error as e:
         return admin.render(
-            request, "health.html", db_error=str(e).strip(), stats=None, gateway=gateway_state.get()
+            request, "health.html", db_error=str(e).strip(), stats=None, channels=gateway_state.all_channels()
         )
     return admin.render(
         request,
         "health.html",
         db_error=None,
         stats=s,
-        gateway=gateway_state.get(),
+        channels=gateway_state.all_channels(),
         groups=groups.list_all(),
         cap=groups.global_settings()["monthly_cap_eur"],
         disk_free_gb=disk_free_gb(),

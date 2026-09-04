@@ -1,44 +1,46 @@
 """Channel rows: which messaging platforms the gateway runs, and their tokens."""
 
 import json
-import os
 
+import audit
 import db
 
-KINDS = ("whatsapp", "telegram", "discord")
-NEEDS_TOKEN = {"telegram", "discord"}
+# One table of kinds. `token`: needs a bot token. `pairs`: pairs with a phone
+# and can be asked to pair again.
+KINDS = {
+    "whatsapp": {"token": False, "pairs": True},
+    "telegram": {"token": True, "pairs": False},
+    "discord": {"token": True, "pairs": False},
+}
+_SELECT = "kind, enabled, updated_at, config IS NOT NULL AS configured, pgp_sym_decrypt(config, %s) AS config"
 
 
-def _key():
-    return os.environ["SECRET_KEY"]
+def _row(r, with_config):
+    config = json.loads(r["config"]) if r["config"] else {}
+    return {**r, "config": config if with_config else audit.redact(config)}
 
 
 def list_all(with_config=False):
     """Rows for the admin (token masked) or for the gateway (decrypted)."""
     with db.connect() as conn:
-        rows = conn.execute(
-            "SELECT kind, enabled, updated_at, config IS NOT NULL AS configured, "
-            "pgp_sym_decrypt(config, %s) AS config FROM channels ORDER BY kind",
-            (_key(),),
-        ).fetchall()
-    out = []
-    for r in rows:
-        config = json.loads(r["config"]) if r["config"] else {}
-        out.append({**r, "config": config if with_config else {k: "***" for k in config}})
-    return out
+        rows = conn.execute(f"SELECT {_SELECT} FROM channels ORDER BY kind", (db.secret_key(),)).fetchall()
+    return [_row(r, with_config) for r in rows]
 
 
 def get(kind):
-    return next((c for c in list_all(with_config=True) if c["kind"] == kind), None)
+    with db.connect() as conn:
+        row = conn.execute(
+            f"SELECT {_SELECT} FROM channels WHERE kind = %s", (db.secret_key(), kind)
+        ).fetchone()
+    return _row(row, True) if row else None
 
 
 def upsert(kind, config=None, enabled=True):
+    """config=None keeps the stored token, so enable/disable does not need it."""
     if kind not in KINDS:
         raise ValueError(f"unknown channel kind {kind!r}")
-    # config=None keeps the stored token, so enable/disable does not need it.
-    if kind in NEEDS_TOKEN and config is None and get(kind) is None:
-        raise ValueError(f"{kind} needs a bot token")
-    if kind in NEEDS_TOKEN and config is not None and not config.get("token"):
+    has_token = config.get("token") if config is not None else get(kind) is not None
+    if KINDS[kind]["token"] and not has_token:
         raise ValueError(f"{kind} needs a bot token")
     with db.connect() as conn:
         conn.execute(
@@ -49,15 +51,8 @@ def upsert(kind, config=None, enabled=True):
               SET config = coalesce(EXCLUDED.config, channels.config),
                   enabled = EXCLUDED.enabled, updated_at = now()
             """,
-            (kind, json.dumps(config) if config is not None else None, _key(), enabled),
+            (kind, json.dumps(config) if config is not None else None, db.secret_key(), enabled),
         )
-    return get(kind)
-
-
-def set_enabled(kind, enabled):
-    with db.connect() as conn:
-        conn.execute("UPDATE channels SET enabled = %s, updated_at = now() WHERE kind = %s", (enabled, kind))
-    return get(kind)
 
 
 def delete(kind):

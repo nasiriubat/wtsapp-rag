@@ -11,7 +11,7 @@ def clean():
     yield
     channels.delete("telegram")
     channels.delete("discord")
-    channels.set_enabled("whatsapp", True)
+    channels.upsert("whatsapp", None, True)
 
 
 def test_whatsapp_row_exists_after_migration(client):

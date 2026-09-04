@@ -7,9 +7,12 @@
 {% else %}
 <div class="grid stats">
   <article>
-    {% if gateway.connected %}<strong class="ok">Linked</strong>WhatsApp as {{ gateway.jid }}
-    {% elif gateway.qr %}<strong class="bad">Not linked</strong><a href="/setup/link">Scan the QR</a>
-    {% elif gateway.reported_at %}<strong class="bad">Disconnected</strong>gateway reported at {{ gateway.reported_at | int }}
+    {% set live = channels.values() | selectattr('connected') | list %}
+    {% set reported = channels.values() | selectattr('reported_at') | list %}
+    {% if live %}<strong class="ok">{{ live | length }} channel{{ 's' if live|length != 1 }} live</strong>
+      {% for k, s in channels.items() if s.connected %}{{ k }}{% if s.jid %} as {{ s.jid }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+    {% elif channels.whatsapp.qr %}<strong class="bad">Not linked</strong><a href="/setup/link">Scan the QR</a>
+    {% elif reported %}<strong class="bad">Disconnected</strong><a href="/admin/channels">see Channels</a>
     {% else %}<strong class="bad">No gateway</strong>nothing reported yet{% endif %}
   </article>
   <article><strong>{{ stats.messages }}</strong>messages, {{ stats.chunks }} chunks, {{ stats.unchunked }} waiting</article>

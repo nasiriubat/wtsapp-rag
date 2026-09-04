@@ -9,3 +9,8 @@ def connect():
     # One connection per unit of work: endpoints run in FastAPI's threadpool, and
     # a shared psycopg connection is not safe across threads.
     return psycopg.connect(os.environ["DATABASE_URL"], autocommit=True, row_factory=dict_row)
+
+
+def secret_key():
+    """The one key that encrypts provider keys and channel tokens at rest."""
+    return os.environ["SECRET_KEY"]

@@ -41,7 +41,7 @@ def preflight_checks():
     checks.append(
         ("ok" if free >= 2 else "warn", "Disk", f"{free:.1f} GB free where models and the queue live.")
     )
-    if gateway_state.get()["reported_at"]:
+    if gateway_state.any_reported():
         checks.append(("ok", "Gateway", "reporting"))
     else:
         checks.append(("warn", "Gateway", "has not reported yet. Check `docker compose logs gateway`."))
@@ -90,12 +90,13 @@ def link(request: Request):
 
 @pages.get("/link/status", response_class=HTMLResponse)
 def link_status(request: Request):
-    return admin.render(request, "setup_link_status.html", gateway=gateway_state.get())
+    # The wizard's link step is the phone pairing; other channels join on the Channels page.
+    return admin.render(request, "setup_link_status.html", gateway=gateway_state.get("whatsapp"))
 
 
 @actions.post("/link/relink")
 def relink():
-    gateway_state.request_relink()
+    gateway_state.request_relink("whatsapp")
     audit.log("gateway.relink", "whatsapp")
     return RedirectResponse("/setup/link", status_code=303)
 
@@ -103,18 +104,19 @@ def relink():
 @pages.get("/groups", response_class=HTMLResponse)
 def pick_groups(request: Request):
     known = {g["external_id"]: g for g in groups.list_all()}
-    return _page(request, "groups", seen=gateway_state.get()["groups"], known=known)
+    return _page(request, "groups", seen=gateway_state.seen_groups(), known=known)
 
 
 @actions.post("/groups")
 async def enable_groups(request: Request):
     form = await request.form()
-    subjects = {g["id"]: g.get("subject") for g in gateway_state.get()["groups"]}
+    seen = {g["id"]: g for g in gateway_state.seen_groups()}
     created = 0
     for external_id in form.getlist("group"):
-        if groups.get(external_id) is None:
+        if groups.get(external_id) is None and external_id in seen:
+            g = seen[external_id]
             admin_api.add_group(
-                {"channel": "whatsapp", "external_id": external_id, "name": subjects.get(external_id)}
+                {"channel": g["channel"], "external_id": external_id, "name": g.get("subject")}
             )
             created += 1
     return RedirectResponse(f"/setup/test?created={created}", status_code=303)

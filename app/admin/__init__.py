@@ -2,6 +2,7 @@
 
 import html
 import pathlib
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -23,6 +24,11 @@ setup_forms = APIRouter(
 
 def render(request, name, **ctx):
     return templates.TemplateResponse(request, name, {"csrf": auth.csrf_token(request), **ctx})
+
+
+def redirect(path, message):
+    """Post-redirect-get with a one-line flash carried in the query string."""
+    return RedirectResponse(f"{path}?{urlencode({'message': message})}", status_code=303)
 
 
 @public.get("/login", response_class=HTMLResponse)

@@ -30,7 +30,7 @@ def test_provider_step_adds_tests_and_sets_default(browser, monkeypatch):
 def test_link_status_renders_qr_then_linked(browser, client):
     import gateway_state
 
-    gateway_state.update(connected=False, qr="1@abc,def,ghi", groups=[])
+    gateway_state.update("whatsapp", connected=False, qr="1@abc,def,ghi", groups=[])
     frag = browser.get("/setup/link/status").text
     assert "<svg" in frag and "Keep this page open" in frag
 
@@ -50,8 +50,8 @@ def test_link_status_renders_qr_then_linked(browser, client):
 
 def test_relink_flag_is_handed_to_the_gateway_once(browser, client):
     assert post(browser, "/setup/link/relink").status_code == 303
-    assert client.get("/gateway/config", headers=GW).json()["relink"] is True
-    assert client.get("/gateway/config", headers=GW).json()["relink"] is False
+    assert client.get("/gateway/config", headers=GW).json()["relink"] == ["whatsapp"]
+    assert client.get("/gateway/config", headers=GW).json()["relink"] == []
 
 
 def test_groups_step_enables_selected_groups(browser):
@@ -59,7 +59,7 @@ def test_groups_step_enables_selected_groups(browser):
     import groups
 
     gid = f"test-{uuid.uuid4()}@g.us"
-    gateway_state.update(connected=True, groups=[{"id": gid, "subject": "Cabin crew"}])
+    gateway_state.update("whatsapp", connected=True, groups=[{"id": gid, "subject": "Cabin crew"}])
     assert "Cabin crew" in browser.get("/setup/groups").text
     res = post(browser, "/setup/groups", group=gid)
     assert res.status_code == 303 and "created=1" in res.headers["location"]
