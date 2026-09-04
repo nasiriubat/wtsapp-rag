@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bare, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
+import { bare, fileOf, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
 
 const OWN = "358401111111@s.whatsapp.net";
 const OWN_LID = "123456789@lid";
@@ -84,4 +84,28 @@ test("quoteStub builds the key Baileys needs", () => {
   const stub = quoteStub("120363@g.us", { wa_msg_id: "S1", sender_jid: "358@s.whatsapp.net", is_bot: false, body: "text" });
   assert.deepEqual(stub.key, { remoteJid: "120363@g.us", id: "S1", participant: "358@s.whatsapp.net", fromMe: false });
   assert.equal(stub.message.conversation, "text");
+});
+
+test("fileOf finds documents and pictures, and ignores everything else", () => {
+  const key = { remoteJid: "120363@g.us", id: "M9" };
+  const doc = { key, message: { documentMessage: { fileName: "rules.pdf", mimetype: "application/pdf" } } };
+  assert.deepEqual(
+    { ...fileOf(doc), media: undefined },
+    { filename: "rules.pdf", mime: "application/pdf", media: undefined },
+  );
+
+  const image = { key, message: { imageMessage: { mimetype: "image/jpeg", caption: "the rota" } } };
+  assert.equal(fileOf(image).filename, "image-M9.jpg");
+
+  // A captioned document nests one level deeper; the download needs the inner one.
+  const captioned = {
+    key,
+    message: { documentWithCaptionMessage: { message: { documentMessage: { fileName: "prices.xlsx" } } } },
+  };
+  const found = fileOf(captioned);
+  assert.equal(found.filename, "prices.xlsx");
+  assert.ok(found.media.message.documentMessage);
+
+  assert.equal(fileOf({ key, message: { audioMessage: {} } }), null);
+  assert.equal(fileOf({ key, message: { conversation: "hello" } }), null);
 });

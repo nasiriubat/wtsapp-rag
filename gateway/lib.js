@@ -6,6 +6,23 @@ export function textOf(msg) {
   return m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? null;
 }
 
+// A document or picture shared in the chat, as { filename, mime, media }, where
+// `media` is the message shape Baileys can download. Null for anything else:
+// audio and video carry no text we can index.
+export function fileOf(msg) {
+  const m = msg.message ?? {};
+  const wrapped = m.documentWithCaptionMessage?.message?.documentMessage;
+  const doc = m.documentMessage ?? wrapped;
+  if (doc) {
+    const media = wrapped ? { ...msg, message: { documentMessage: wrapped } } : msg;
+    return { filename: doc.fileName ?? `document-${msg.key.id}`, mime: doc.mimetype ?? null, media };
+  }
+  if (m.imageMessage) {
+    return { filename: `image-${msg.key.id}.jpg`, mime: m.imageMessage.mimetype ?? "image/jpeg", media: msg };
+  }
+  return null;
+}
+
 export function contextOf(msg) {
   return msg.message?.extendedTextMessage?.contextInfo;
 }

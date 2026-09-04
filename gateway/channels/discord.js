@@ -60,6 +60,18 @@ export async function start(core, config, log) {
   // Recomputed per report so a channel created after connect shows up.
   const report = () => core.report("discord", { ...state, groups: state.connected ? listChannels() : [] });
 
+  async function shareFile(payload, attachment) {
+    const res = await fetch(attachment.url);
+    if (!res.ok) throw new Error(`attachment download ${res.status}`);
+    await core.shareFile({
+      groupId: payload.group_id,
+      senderJid: payload.sender_jid,
+      filename: attachment.name ?? "attachment",
+      mime: attachment.contentType,
+      bytes: Buffer.from(await res.arrayBuffer()),
+    });
+  }
+
   client.once("clientReady", () => {
     Object.assign(state, { connected: true, jid: client.user.tag });
     log.info({ tag: client.user.tag }, "discord connected");
@@ -79,6 +91,13 @@ export async function start(core, config, log) {
     const group = core.groupFor(groupId(m.channelId));
     if (!group) return;
     const payload = payloadFromDiscord(m, client.user.id);
+    if (group.files) {
+      for (const attachment of m.attachments.values()) {
+        shareFile(payload, attachment).catch((err) =>
+          log.warn({ err: err.message, filename: attachment.name }, "could not fetch shared file"),
+        );
+      }
+    }
     if (payload.body === null) return;
     const repliedToBot = async () => (await m.fetchReference().catch(() => null))?.author?.id === client.user.id;
     core

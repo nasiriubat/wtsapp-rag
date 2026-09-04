@@ -42,6 +42,26 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
     }
   }
 
+  // Files shared in a chat, when the group has opted in. Not queued: a retry
+  // file would hold megabytes of base64, and a file is never as urgent as a
+  // message. The app decides whether to keep it.
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+  async function shareFile({ groupId, senderJid, filename, mime, bytes }) {
+    if (!bytes || bytes.length > MAX_FILE_BYTES) {
+      log.info({ group_id: groupId, filename, bytes: bytes?.length ?? 0 }, "shared file skipped");
+      return;
+    }
+    log.info({ group_id: groupId, filename, bytes: bytes.length }, "shared file");
+    await post("/ingest/file", {
+      group_id: groupId,
+      sender_jid: senderJid,
+      filename,
+      mime: mime ?? null,
+      data: Buffer.from(bytes).toString("base64"),
+    });
+  }
+
   let groups = new Map();
 
   async function refresh() {
@@ -102,6 +122,7 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
     refresh,
     handle,
     handleDirect,
+    shareFile,
     groupFor: (externalId) => groups.get(externalId),
     report: (channel, state) => post("/gateway/state", { channel, ...state }),
   };

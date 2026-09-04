@@ -99,6 +99,7 @@ def save(
     monthly_cap_eur: str = Form(""),
     decision_tracking: bool = Form(False),
     allow_dm: bool = Form(False),
+    index_files: bool = Form(False),
     correction_ack: str = Form(""),
 ):
     # Empty fields fall back to the Settings defaults through validation.
@@ -109,6 +110,7 @@ def save(
         "monthly_cap_eur": _number(monthly_cap_eur, float, "monthly cap"),
         "decision_tracking": decision_tracking,
         "allow_dm": allow_dm,
+        "index_files": index_files,
     }
     if correction_ack.strip():
         raw["correction_ack"] = correction_ack.strip()

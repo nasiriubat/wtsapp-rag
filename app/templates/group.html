@@ -49,6 +49,10 @@
       Track decisions <small>one small model call per new chunk, so answers can say what changed and when</small></label>
     <label><input type="checkbox" name="allow_dm" value="true" {% if s.allow_dm %}checked{% endif %}>
       Allow private questions <small>members of this group can ask the bot directly and get a text citation</small></label>
+    <label><input type="checkbox" name="index_files" value="true" {% if s.index_files %}checked{% endif %}>
+      Index files shared in the chat <small>documents and pictures posted here become searchable, the same as an
+      upload on the Knowledge page. The gateway has to download them, which is the behaviour most likely to get a
+      WhatsApp number flagged, and each picture costs one model call to read.</small></label>
     <label>Correction acknowledgement <small>the reply when someone answers the bot with "wrong, …"</small>
       <input name="correction_ack" value="{{ s.correction_ack }}"></label>
   </div>

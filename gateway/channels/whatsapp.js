@@ -1,9 +1,13 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
+import makeWASocket, {
+  useMultiFileAuthState,
+  DisconnectReason,
+  downloadMediaMessage,
+} from "@whiskeysockets/baileys";
 import fs from "node:fs";
 import path from "node:path";
 import qrcode from "qrcode-terminal";
 import { blankState } from "../core.js";
-import { bare, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
+import { bare, fileOf, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
 
 const AUTH_DIR = "auth_state";
 
@@ -27,6 +31,22 @@ export async function start(core, config, log) {
   function remember(id) {
     ourSends.add(id);
     if (ourSends.size > 500) ourSends.delete(ourSends.values().next().value);
+  }
+
+  async function shareFile(msg, file) {
+    const bytes = await downloadMediaMessage(
+      file.media,
+      "buffer",
+      {},
+      { logger: log.child({ module: "baileys" }, { level: "warn" }), reuploadRequest: sock.updateMediaMessage },
+    );
+    await core.shareFile({
+      groupId: msg.key.remoteJid,
+      senderJid: bare(msg.key.participantAlt ?? msg.key.participant ?? ""),
+      filename: file.filename,
+      mime: file.mime,
+      bytes,
+    });
   }
 
   async function listGroups() {
@@ -108,9 +128,15 @@ export async function start(core, config, log) {
           seen.add(jid);
           continue;
         }
+        const ours = ourSends.has(msg.key.id);
+        const shared = group.files && !ours ? fileOf(msg) : null;
+        if (shared) {
+          shareFile(msg, shared).catch((err) =>
+            log.warn({ err: err.message, filename: shared.filename }, "could not fetch shared file"),
+          );
+        }
         const text = textOf(msg);
         if (text === null) continue;
-        const ours = ourSends.has(msg.key.id);
         core
           .handle(toPayload(msg, ownJid, ours), {
             trigger: () =>

@@ -29,7 +29,12 @@ def config():
             if c["enabled"]
         ],
         "groups": [
-            {"external_id": g["external_id"], "channel": g["channel"], "triggers": g["settings"]["triggers"]}
+            {
+                "external_id": g["external_id"],
+                "channel": g["channel"],
+                "triggers": g["settings"]["triggers"],
+                "files": g["settings"]["index_files"],
+            }
             for g in groups.list_all()
             if g["enabled"]
         ],

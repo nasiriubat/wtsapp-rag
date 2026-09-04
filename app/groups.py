@@ -49,6 +49,10 @@ class Settings(BaseModel):
     quiet_hours: QuietHours | None = None
     monthly_cap_eur: float | None = Field(None, ge=0)  # calendar month, UTC
     decision_tracking: bool = True  # extract decisions from chunks; one small provider call per chunk
+    # Files shared in the chat become searchable knowledge. Off by default: it
+    # makes the gateway download media, which is the behaviour most likely to
+    # get a WhatsApp number flagged, and every image costs one model call.
+    index_files: bool = False
     allow_dm: bool = True  # members may ask the bot privately about this group
     correction_ack: str = "Noted, I'll go with that from now on."
 

@@ -25,6 +25,17 @@ export function payloadFromTelegram(msg, botId) {
   };
 }
 
+// A document, or the largest rendition of a photo. Telegram sends photos as a
+// ladder of sizes; the last one is the biggest.
+export function telegramFile(msg) {
+  if (msg.document) {
+    return { id: msg.document.file_id, filename: msg.document.file_name ?? "document", mime: msg.document.mime_type };
+  }
+  const photo = (msg.photo ?? []).at(-1);
+  if (photo) return { id: photo.file_id, filename: `photo-${msg.message_id}.jpg`, mime: "image/jpeg" };
+  return null;
+}
+
 export function telegramTrigger(msg, me, triggers) {
   const text = msg.text ?? msg.caption ?? "";
   if (text.toLowerCase().includes(`@${me.username}`.toLowerCase())) return true;
@@ -46,6 +57,20 @@ export async function start(core, config, log) {
   let dead = false;
   const report = () => core.report("telegram", { ...state, groups: [...seen.values()] });
 
+  async function shareFile(ctx, payload, file) {
+    // getFile hands back a path under the bot API's file host, valid for an hour.
+    const info = await ctx.api.getFile(file.id);
+    const res = await fetch(`https://api.telegram.org/file/bot${config.token}/${info.file_path}`);
+    if (!res.ok) throw new Error(`file download ${res.status}`);
+    await core.shareFile({
+      groupId: payload.group_id,
+      senderJid: payload.sender_jid,
+      filename: file.filename,
+      mime: file.mime,
+      bytes: Buffer.from(await res.arrayBuffer()),
+    });
+  }
+
   bot.on("message", (ctx) => {
     const msg = ctx.message;
     if (msg.chat.type === "private") {
@@ -62,6 +87,12 @@ export async function start(core, config, log) {
     const group = core.groupFor(id);
     if (!group) return;
     const payload = payloadFromTelegram(msg, me.id);
+    const shared = group.files && !payload.is_bot ? telegramFile(msg) : null;
+    if (shared) {
+      shareFile(ctx, payload, shared).catch((err) =>
+        log.warn({ err: err.message, filename: shared.filename }, "could not fetch shared file"),
+      );
+    }
     if (payload.body === null) return;
     // Not awaited: grammY processes updates one at a time, and an answer takes seconds.
     core
