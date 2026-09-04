@@ -16,6 +16,8 @@ def test_env_values_become_rows_once(monkeypatch):
     if providers.list_all() or groups.list_all():
         pytest.skip("bootstrap only runs on an empty database")
     gid = f"test-{uuid.uuid4()}@g.us"
+    for var, *_ in bootstrap.SEEDS:
+        monkeypatch.delenv(var, raising=False)
     for var in ("GEMINI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_BASE_URL"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("GEMINI_API_KEY", "g-key")

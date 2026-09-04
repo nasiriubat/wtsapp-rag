@@ -19,6 +19,12 @@ def post(url, headers, body):
         return res.json()
 
 
+def get(url, headers, params=None):
+    res = httpx.get(url, headers=headers, params=params, timeout=TIMEOUT)
+    res.raise_for_status()
+    return res.json()
+
+
 def merge(body, options):
     # Admin-supplied options are merged into the request body; a null value
     # removes a key. This is the escape hatch for provider-specific knobs

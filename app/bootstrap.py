@@ -1,6 +1,8 @@
-"""Carry a v0.1 install forward. v0.1 configured everything in .env; v1 keeps
-that in Postgres. On first start with an empty database, the old variables
-become rows. After that they are ignored."""
+"""Carry a v0.1 install forward, and repair a config that cannot answer.
+
+v0.1 configured everything in .env; v1 keeps that in Postgres. On first start
+with an empty database, the old variables become rows. After that they are
+ignored."""
 
 import logging
 import os
@@ -19,6 +21,28 @@ SEEDS = [
     ("OPENAI_API_KEY", "OpenAI (from .env)", "openai", "gpt-5.4-mini", None),
     ("OPENROUTER_API_KEY", "OpenRouter (from .env)", "openai", "openai/gpt-5.4-mini", "OPENROUTER_BASE_URL"),
 ]
+
+
+def ensure_default(prefer=None):
+    """The global default has to name a provider that exists and is enabled.
+    When it does not, every question is refused with "no provider is configured",
+    which reads like a missing key rather than a deleted or disabled row. Adopt
+    another provider instead, and say so. `prefer` is the one just added."""
+    current = groups.global_settings()["default_provider_id"]
+    if current is not None:
+        row = providers.get(current)
+        if row is not None and row["enabled"]:
+            return row
+    enabled = [p for p in providers.list_all() if p["enabled"]]
+    chosen = next((p for p in enabled if p["id"] == prefer), None) or (enabled[0] if enabled else None)
+    if chosen is None and current is None:
+        return None
+    groups.set_global(default_provider_id=chosen["id"] if chosen else None)
+    log.warning(
+        "the default provider was missing; adopted another",
+        extra={"provider": chosen["name"] if chosen else None},
+    )
+    return chosen
 
 
 def run():
@@ -44,3 +68,4 @@ def run():
             settings["confidence_threshold"] = float(env["CONFIDENCE_THRESHOLD"])
         groups.create("whatsapp", env["GROUP_JID"], settings=settings)
         log.info("bootstrapped group from GROUP_JID", extra={"group": env["GROUP_JID"]})
+    ensure_default()

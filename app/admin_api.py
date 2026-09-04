@@ -9,6 +9,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, Field, ValidationError
 
 import audit
+import bootstrap
 import channels
 import db
 import groups
@@ -68,8 +69,7 @@ def add_provider(fields):
         raise HTTPException(422, f"kind must be one of {sorted(providers.KINDS)}")
     row = providers.create(**body.model_dump())
     audit.log("provider.create", str(row["id"]), body.model_dump())
-    if groups.global_settings()["default_provider_id"] is None:
-        groups.set_global(default_provider_id=row["id"])
+    bootstrap.ensure_default(prefer=row["id"])
     return row
 
 
@@ -81,7 +81,15 @@ def apply_provider(provider_id, fields):
     if row is None:
         raise HTTPException(404)
     audit.log("provider.update", str(provider_id), clean)
+    # Disabling the default leaves the install unable to answer; adopt another.
+    bootstrap.ensure_default()
     return row
+
+
+def remove_provider(provider_id):
+    providers.delete(provider_id)
+    audit.log("provider.delete", str(provider_id))
+    bootstrap.ensure_default()
 
 
 def run_provider_test(provider_id):
@@ -115,8 +123,7 @@ def patch_provider(provider_id: int, body: ProviderPatch):
 
 @router.delete("/providers/{provider_id}", status_code=204)
 def delete_provider(provider_id: int):
-    providers.delete(provider_id)
-    audit.log("provider.delete", str(provider_id))
+    remove_provider(provider_id)
 
 
 @router.post("/providers/{provider_id}/test")

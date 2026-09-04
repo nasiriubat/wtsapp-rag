@@ -93,6 +93,18 @@ def generate(provider, system, prompt):
     return KINDS[provider["kind"]].generate(provider, system, prompt)
 
 
+def models(provider):
+    """What this key can actually use, asked of the provider itself. The admin
+    picks from it instead of having to know model ids by heart."""
+    return KINDS[provider["kind"]].models(provider)
+
+
+def describe_image(provider, image, mime, prompt):
+    """Read a picture or a scanned page. Every kind here accepts images; a model
+    that does not will say so, and the caller shows that to the admin."""
+    return KINDS[provider["kind"]].describe_image(provider, image, mime, prompt)
+
+
 def cost(provider, tokens_in, tokens_out):
     per_million = Decimal(tokens_in) * Decimal(provider["price_in"]) + Decimal(tokens_out) * Decimal(
         provider["price_out"]

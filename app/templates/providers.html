@@ -3,6 +3,11 @@
 {% block subtitle %}<p class="sub">The models that write the answers. Keys are encrypted and never shown again.</p>{% endblock %}
 {% block body %}
 {% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
+{% if providers and not default_id %}<div class="notice bad">No provider is the default, so every question is
+  refused. Press <strong>Make default</strong> on the one that should answer.</div>{% endif %}
+<div class="notice">Add a key, press <strong>List the models</strong> to pick one, then <strong>Make default</strong>.
+  The default answers in every group. A group can use a different one from
+  <a href="/admin/groups">its own page</a>, under <strong>Answer with</strong>.</div>
 
 {% for p in providers %}
 <div class="card">
@@ -17,7 +22,15 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid">
       <label>Name <input name="name" value="{{ p.name }}" required></label>
-      <label>Model <input name="model" value="{{ p.model }}" required></label>
+      <label>Model
+        <input id="model-{{ p.id }}" name="model" value="{{ p.model }}" required>
+        <span class="field-aside">
+          <button type="button" class="link" hx-post="/admin/providers/models"
+                  hx-vals='{"target": "model-{{ p.id }}", "kind": "{{ p.kind }}", "provider_id": "{{ p.id }}"}'
+                  hx-include="closest form" hx-target="#pick-{{ p.id }}">List the models</button>
+          <span id="pick-{{ p.id }}"></span>
+        </span>
+      </label>
     </div>
     <label>Base URL <small>OpenAI-compatible services only; leave empty for OpenAI itself</small>
       <input name="base_url" value="{{ p.base_url or '' }}" placeholder="https://openrouter.ai/api/v1"></label>
@@ -60,9 +73,18 @@
     <div class="grid">
       <label>Name <input name="name" placeholder="Claude" required></label>
       <label>Kind <select name="kind" required>{% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select></label>
-      <label>Model <input name="model" placeholder="claude-sonnet-5" required></label>
+      <label>Model
+        <input id="model-new" name="model" placeholder="claude-sonnet-5" required>
+        <span class="field-aside">
+          <button type="button" class="link" hx-post="/admin/providers/models"
+                  hx-vals='{"target": "model-new"}' hx-include="closest form"
+                  hx-target="#pick-new">List the models</button>
+          <span id="pick-new"></span>
+        </span>
+      </label>
     </div>
-    <label>API key <input name="api_key" type="password" autocomplete="new-password" required></label>
+    <label>API key <small>paste it, then list the models to pick one</small>
+      <input name="api_key" type="password" autocomplete="new-password" required></label>
     <label>Base URL <small>only for OpenAI-compatible services other than OpenAI</small>
       <input name="base_url" placeholder="https://openrouter.ai/api/v1"></label>
     <div class="grid">

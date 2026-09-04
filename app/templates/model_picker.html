@@ -1,0 +1,4 @@
+<select class="picker" onchange="document.getElementById('{{ target }}').value = this.value">
+  <option value="">{{ names | length }} models — pick one</option>
+  {% for name in names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+</select>

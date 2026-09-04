@@ -103,3 +103,86 @@ def test_merge_removes_null_and_merges_nested():
 
 def test_cost_per_million_tokens():
     assert providers.cost(provider("openai"), 1_000_000, 100_000) == Decimal("2.1")
+
+
+def test_the_model_list_comes_from_each_provider(monkeypatch):
+    import providers
+    from providers import http
+
+    calls = {}
+
+    def fake_get(url, headers, params=None):
+        calls["url"] = url
+        if "anthropic" in url:
+            return {"data": [{"id": "claude-opus-5"}]}
+        if "generativelanguage" in url:
+            return {
+                "models": [
+                    {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+                    {"name": "models/embedding-001", "supportedGenerationMethods": ["embedContent"]},
+                ]
+            }
+        return {"data": [{"id": "gpt-5.4-mini"}, {"id": "gpt-5.4"}]}
+
+    monkeypatch.setattr(http, "get", fake_get)
+    assert providers.models({"kind": "anthropic", "api_key": "k"}) == ["claude-opus-5"]
+    # Only the models that can answer, and without the "models/" prefix.
+    assert providers.models({"kind": "gemini", "api_key": "k"}) == ["gemini-3.8-flash"]
+    assert providers.models({"kind": "openai", "api_key": "k", "base_url": "https://x/v1"}) == [
+        "gpt-5.4",
+        "gpt-5.4-mini",
+    ]
+    assert calls["url"] == "https://x/v1/models"
+
+
+def test_an_image_is_sent_in_each_wire_format(monkeypatch):
+    import providers
+    from providers import http
+
+    sent = {}
+
+    def fake_post(url, headers, body):
+        sent["body"] = body
+        return {
+            "content": [{"type": "text", "text": "a sauna"}],
+            "candidates": [{"content": {"parts": [{"text": "a sauna"}]}}],
+            "choices": [{"message": {"content": "a sauna"}}],
+        }
+
+    monkeypatch.setattr(http, "post", fake_post)
+    for kind in ("anthropic", "gemini", "openai"):
+        provider = {"kind": kind, "api_key": "k", "model": "m", "base_url": None, "options": {}}
+        assert providers.describe_image(provider, b"png-bytes", "image/png", "read it") == "a sauna"
+    # The last one through is the OpenAI shape: a data URI, not raw bytes.
+    assert sent["body"]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_a_missing_default_provider_is_adopted_not_left_broken(monkeypatch):
+    import bootstrap
+    import groups
+    import providers
+
+    rows = [{"id": 7, "name": "Claude", "enabled": False}, {"id": 9, "name": "Gemini", "enabled": True}]
+    chosen = {}
+    monkeypatch.setattr(providers, "list_all", lambda: rows)
+    monkeypatch.setattr(providers, "get", lambda i: next((r for r in rows if r["id"] == i), None))
+    monkeypatch.setattr(groups, "set_global", lambda **kw: chosen.update(kw))
+
+    # Nothing set: the first enabled provider is adopted.
+    monkeypatch.setattr(groups, "global_settings", lambda: {"default_provider_id": None})
+    assert bootstrap.ensure_default()["id"] == 9 and chosen == {"default_provider_id": 9}
+
+    # Pointing at a deleted row: same repair, rather than refusing every question.
+    chosen.clear()
+    monkeypatch.setattr(groups, "global_settings", lambda: {"default_provider_id": 404})
+    assert bootstrap.ensure_default()["id"] == 9
+
+    # Pointing at a disabled row: also repaired.
+    chosen.clear()
+    monkeypatch.setattr(groups, "global_settings", lambda: {"default_provider_id": 7})
+    assert bootstrap.ensure_default()["id"] == 9
+
+    # A healthy default is left alone.
+    chosen.clear()
+    monkeypatch.setattr(groups, "global_settings", lambda: {"default_provider_id": 9})
+    assert bootstrap.ensure_default()["id"] == 9 and chosen == {}

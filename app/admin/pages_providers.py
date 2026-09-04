@@ -67,6 +67,37 @@ def create(
     return RedirectResponse("/admin/providers", status_code=303)
 
 
+# Before the /providers/{provider_id} routes, or "models" is parsed as an id.
+@actions.post("/providers/models", response_class=HTMLResponse)
+def list_models(
+    request: Request,
+    target: str = Form(),
+    kind: str = Form(),
+    api_key: str = Form(""),
+    base_url: str = Form(""),
+    provider_id: str = Form(""),
+):
+    """Ask the provider what this key can use, and hand back a dropdown. The key
+    may be the one already stored, which is why an id is accepted instead."""
+    if kind not in providers.KINDS:
+        raise HTTPException(422, "unknown kind")
+    stored = providers.get(int(provider_id)) if provider_id.strip() else None
+    if not api_key and stored is None:
+        return HTMLResponse('<span class="bad">Paste the key first.</span>')
+    probe = {
+        "kind": kind,
+        "api_key": api_key or stored["api_key"],
+        "base_url": base_url or (stored["base_url"] if stored else None),
+    }
+    try:
+        names = providers.models(probe)
+    except Exception as e:  # any provider or network failure reads the same here
+        return HTMLResponse(f'<span class="bad">Could not list models: {admin.escape(str(e))}</span>')
+    if not names:
+        return HTMLResponse('<span class="bad">The provider returned no models.</span>')
+    return admin.render(request, "model_picker.html", names=names, target=target)
+
+
 @actions.post("/providers/{provider_id}")
 def update(
     provider_id: int,
@@ -96,8 +127,7 @@ def update(
 
 @actions.post("/providers/{provider_id}/delete")
 def delete(provider_id: int):
-    providers.delete(provider_id)
-    audit.log("provider.delete", str(provider_id))
+    admin_api.remove_provider(provider_id)
     return RedirectResponse("/admin/providers", status_code=303)
 
 
