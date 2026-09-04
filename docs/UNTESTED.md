@@ -16,8 +16,8 @@ recorded manual check behind it.
 - Wizard steps 3 to 5 against a real link: the QR the gateway reports
   scanning successfully, `groupFetchAllParticipating` returning the group
   list, and the round-trip detector seeing the first real question.
-- Relink: the gateway deleting its auth state and restarting into a fresh
-  QR when the admin asks.
+- Relink: the gateway logging out in process, clearing its auth files and
+  pairing again with a fresh QR when the admin asks.
 
 ## Verified live (3 Sept 2026)
 

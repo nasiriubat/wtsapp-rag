@@ -3,6 +3,61 @@
 One entry per phase: what the code review and security review found, and
 what was done about it. Findings that were not fixed say why.
 
+## Phase 2 (v0.4) — code and security review, 4 Sept 2026
+
+Security review (eight categories, whole `ca10a66..HEAD` range): no
+high-confidence findings. Verified: Jinja autoescape on, the one `| safe` is
+segno's SVG of the pairing QR, every hand-built HTMLResponse escapes, all
+state changes sit behind session + CSRF, SQL `SET` clauses take column names
+from pydantic models only, provider keys never leave the server, audit
+redacts them.
+
+Code review, fixed:
+
+- **Relink was broken twice over.** The gateway deleted `auth_state`, which
+  is a bind mount (EBUSY, swallowed by the config-poll catch), and the app
+  only cleared the flag on a new QR, which a restarted gateway could never
+  reach before re-reading the flag: an endless restart loop. Now the flag is
+  handed out once (`take_relink`), the gateway calls `sock.logout()` in
+  process, the close handler clears the directory's contents and reconnects.
+- Refused/answered filters and the health card keyed on `cost IS NULL`,
+  which called a model refusal "answered" and a budget stop "refused".
+  Migration 004 adds `outcome`; filters, counts and the export use it.
+- Import reported the file length, not rows written; re-uploads claimed
+  thousands of duplicates. `insert` returns the cursor rowcount.
+- A free-text time zone crashed every question in the group with
+  `ZoneInfoNotFoundError`. Quiet hours are a validated model; HH:MM and IANA
+  zone checked on save.
+- Export `Content-Disposition` embedded the group name; non-Latin names
+  (the wizard copies WhatsApp subjects in) raised in header encoding. ASCII
+  file names now, and exports stream through a server-side cursor in batches.
+- Form parsing turned bad numbers, a deleted provider id, whitespace-padded
+  ids and negative caps into 500s. All validate to 422 through the same
+  helpers the JSON API uses (`add_provider`, `apply_provider`, `add_group`,
+  `apply_group`), which also removes three copies of the same rules.
+- Login lockout was one global counter, so anyone could lock the admin out
+  for a minute. Keyed by client address.
+- Wizard result text was smuggled through a redirect unencoded; `&` and `#`
+  truncated it. Now `ok=` plus a urlencoded `detail=`.
+- QR SVG rendered on every 3-second poll; now once per QR.
+- Health stats are one statement; a down database renders a message instead
+  of a traceback. Disk is measured where the models live.
+- Duplication: shared `browser` fixture and `post` helper, one JSONL streamer,
+  kind list from `providers.KINDS`, month predicate from `budget`.
+- Channel dropdown offered Telegram and Discord before they exist. WhatsApp
+  only until phase 3.
+
+Recorded, not changed:
+
+- Admin pages open several connections per request. Same note as phase 1.
+- `/api` uses HTTP Basic without CSRF; the only bodiless POST is the
+  provider test. Low impact; the panel is the primary surface.
+- Logout deletes the cookie but the signature stays valid for its 7 days.
+  Server-side sessions are a v1.x item.
+- Behind a TLS-terminating proxy uvicorn needs `--proxy-headers` for the
+  cookie's `Secure` flag; goes in OPERATIONS.md at release.
+- `segno` was added without a roadmap line; added to the phase 2 list.
+
 ## Phase 1 (v0.3) — code review, 3 Sept 2026
 
 Three of eight review angles completed before the session rate limit; the

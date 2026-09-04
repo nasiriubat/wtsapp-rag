@@ -109,7 +109,8 @@ can without a phone or a token; the final phone test is yours.
   groups by name, round trip.
 - Server-rendered Jinja2 + htmx, vendored, no build step, mobile-first.
 - Deps: `jinja2`, `itsdangerous` (session signing), `python-multipart`
-  (forms). htmx and Pico CSS vendored as static files.
+  (forms), `segno` (QR as SVG, pure Python). htmx and Pico CSS vendored as
+  static files.
 
 ### Phase 3 — channels (v0.5)
 - Gateway becomes a multi-channel process: `channels/whatsapp.js`,

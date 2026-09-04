@@ -1,19 +1,8 @@
-import os
 import uuid
 
-import pytest
-from conftest import GW, needs_db
+from conftest import GW, needs_db, post
 
 pytestmark = needs_db
-
-
-@pytest.fixture()
-def browser(client):
-    client.cookies.clear()
-    client.post("/admin/login", data={"password": os.environ["ADMIN_PASSWORD"]}, follow_redirects=False)
-    client.csrf = client.get("/admin").text.split('name="csrf" value="')[1].split('"')[0]
-    yield client
-    client.cookies.clear()
 
 
 def test_preflight_lists_checks(browser):
@@ -25,21 +14,15 @@ def test_provider_step_adds_tests_and_sets_default(browser, monkeypatch):
     import groups
     import providers
 
-    monkeypatch.setattr(providers, "check", lambda p: "OK")
+    monkeypatch.setattr(providers, "check", lambda p: "OK & ready #1")
     before = groups.global_settings()["default_provider_id"]
     groups.set_global(default_provider_id=None)
-    res = browser.post(
-        "/setup/provider",
-        data={"csrf": browser.csrf, "kind": "openai", "api_key": "k", "model": "m"},
-        follow_redirects=False,
-    )
-    assert res.status_code == 303 and "tested=ok" in res.headers["location"]
+    res = post(browser, "/setup/provider", kind="openai", api_key="k", model="m")
+    assert res.status_code == 303 and "ok=1" in res.headers["location"]
     pid = groups.global_settings()["default_provider_id"]
     assert pid is not None and providers.get(pid)["kind"] == "openai"
-    assert (
-        "1 provider configured" in browser.get("/setup/provider").text
-        or "configured" in browser.get("/setup/provider").text
-    )
+    page = browser.get(res.headers["location"]).text
+    assert "Test passed" in page and "OK &amp; ready #1" in page and "configured:" in page
     providers.delete(pid)
     groups.set_global(default_provider_id=before)
 
@@ -51,7 +34,6 @@ def test_link_status_renders_qr_then_linked(browser, client):
     frag = browser.get("/setup/link/status").text
     assert "<svg" in frag and "Keep this page open" in frag
 
-    # The gateway reports through its own endpoint with the token.
     res = client.post(
         "/gateway/state",
         json={
@@ -66,15 +48,9 @@ def test_link_status_renders_qr_then_linked(browser, client):
     assert "Linked as 358@s.whatsapp.net" in frag and "1 group" in frag
 
 
-def test_relink_flag_round_trips_through_config(browser, client):
-    import gateway_state
-
-    assert (
-        browser.post("/setup/link/relink", data={"csrf": browser.csrf}, follow_redirects=False).status_code
-        == 303
-    )
+def test_relink_flag_is_handed_to_the_gateway_once(browser, client):
+    assert post(browser, "/setup/link/relink").status_code == 303
     assert client.get("/gateway/config", headers=GW).json()["relink"] is True
-    gateway_state.update(connected=False, qr="new-qr")
     assert client.get("/gateway/config", headers=GW).json()["relink"] is False
 
 
@@ -85,7 +61,7 @@ def test_groups_step_enables_selected_groups(browser):
     gid = f"test-{uuid.uuid4()}@g.us"
     gateway_state.update(connected=True, groups=[{"id": gid, "subject": "Cabin crew"}])
     assert "Cabin crew" in browser.get("/setup/groups").text
-    res = browser.post("/setup/groups", data={"csrf": browser.csrf, "group": gid}, follow_redirects=False)
+    res = post(browser, "/setup/groups", group=gid)
     assert res.status_code == 303 and "created=1" in res.headers["location"]
     g = groups.get(gid)
     assert g["name"] == "Cabin crew" and g["enabled"]

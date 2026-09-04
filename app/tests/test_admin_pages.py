@@ -1,29 +1,15 @@
-import os
 import uuid
 
-import pytest
-from conftest import needs_db
+from conftest import needs_db, post
 
 pytestmark = needs_db
 
 
-@pytest.fixture()
-def browser(client):
-    client.cookies.clear()
-    client.post("/admin/login", data={"password": os.environ["ADMIN_PASSWORD"]}, follow_redirects=False)
-    page = client.get("/admin").text
-    client.csrf = page.split('name="csrf" value="')[1].split('"')[0]
-    yield client
-    client.cookies.clear()
-
-
-def post(browser, path, **data):
-    return browser.post(path, data={"csrf": browser.csrf, **data}, follow_redirects=False)
-
-
 def test_provider_lifecycle_through_forms(browser, monkeypatch):
+    import groups
     import providers
 
+    before = groups.global_settings()["default_provider_id"]
     res = post(
         browser,
         "/admin/providers",
@@ -46,20 +32,20 @@ def test_provider_lifecycle_through_forms(browser, monkeypatch):
     assert res.status_code == 303 and providers.get(pid)["model"] == "m2"
     assert providers.get(pid)["api_key"] == "sk-x"  # empty key field keeps the old one
 
-    bad = post(browser, f"/admin/providers/{pid}", name="x", model="m", options="not json")
-    assert bad.status_code == 422
+    assert (
+        post(browser, f"/admin/providers/{pid}", name="x", model="m", options="not json").status_code == 422
+    )
+    assert post(browser, f"/admin/providers/{pid}", name="x", model="m", price_in="-1").status_code == 422
 
     monkeypatch.setattr(providers, "check", lambda p: "OK")
     res = browser.post(f"/admin/providers/{pid}/test", headers={"X-CSRF-Token": browser.csrf})
     assert res.status_code == 200 and "OK" in res.text
 
     assert post(browser, f"/admin/providers/{pid}/default").status_code == 303
-    import groups
-
     assert groups.global_settings()["default_provider_id"] == pid
     assert post(browser, f"/admin/providers/{pid}/delete").status_code == 303
     assert providers.get(pid) is None
-    groups.set_global(default_provider_id=None)
+    groups.set_global(default_provider_id=before)
 
 
 def test_group_settings_form_roundtrip_and_threshold_stat(browser):
@@ -67,9 +53,11 @@ def test_group_settings_form_roundtrip_and_threshold_stat(browser):
     import groups
 
     gid = f"test-{uuid.uuid4()}@g.us"
-    res = post(browser, "/admin/groups", channel="whatsapp", external_id=gid, name="Cabin")
+    res = post(browser, "/admin/groups", channel="whatsapp", external_id=f" {gid} ", name="Cabin")
     assert res.status_code == 303
     group_id = int(res.headers["location"].rsplit("/", 1)[1])
+    assert groups.get(gid) is not None  # stripped before storing
+    assert post(browser, "/admin/groups", channel="whatsapp", external_id=gid).status_code == 409
     with db.connect() as conn:
         for conf in (0.05, 0.5, 0.9):
             conn.execute(
@@ -82,9 +70,7 @@ def test_group_settings_form_roundtrip_and_threshold_stat(browser):
     frag = browser.get(f"/admin/groups/{group_id}/threshold?value=0.6").text
     assert "67% of the last 3 questions" in frag
 
-    res = post(
-        browser,
-        f"/admin/groups/{group_id}",
+    form = dict(
         name="Cabin crew",
         enabled="true",
         triggers="@bot, hey",
@@ -98,14 +84,20 @@ def test_group_settings_form_roundtrip_and_threshold_stat(browser):
         quiet_tz="Europe/Helsinki",
         monthly_cap_eur="5",
     )
-    assert res.status_code == 303
+    assert post(browser, f"/admin/groups/{group_id}", **form).status_code == 303
     g = groups.get_by_id(group_id)
     assert g["name"] == "Cabin crew" and g["settings"]["triggers"] == ["@bot", "hey"]
     assert g["settings"]["quiet_hours"] == {"start": "22:00", "end": "07:00", "tz": "Europe/Helsinki"}
     assert g["settings"]["monthly_cap_eur"] == 5 and g["settings"]["retention_days"] == 30
 
-    bad = post(browser, f"/admin/groups/{group_id}", confidence_threshold="7")
-    assert bad.status_code == 422
+    assert (
+        post(browser, f"/admin/groups/{group_id}", **{**form, "confidence_threshold": "7"}).status_code == 422
+    )
+    assert post(browser, f"/admin/groups/{group_id}", **{**form, "quiet_tz": "Helsinki"}).status_code == 422
+    assert post(browser, f"/admin/groups/{group_id}", **{**form, "retention_days": "1e2"}).status_code == 422
+    assert post(browser, f"/admin/groups/{group_id}", **{**form, "provider_id": "999999"}).status_code == 422
+    # A rejected form leaves the previous settings in place.
+    assert groups.get_by_id(group_id)["settings"]["quiet_hours"]["tz"] == "Europe/Helsinki"
 
     assert post(browser, f"/admin/groups/{group_id}/delete").status_code == 303
     assert groups.get_by_id(group_id) is None
