@@ -19,6 +19,13 @@ recorded manual check behind it.
 - Relink: the gateway logging out in process, clearing its auth files and
   pairing again with a fresh QR when the admin asks.
 
+## Needs a Telegram or Discord bot token
+
+- Telegram and Discord channels end to end: connecting, seeing groups,
+  trigger detection, quote-replies. The payload mapping and trigger logic
+  are unit-tested against the documented update shapes; grammY and
+  discord.js were never run against the real APIs here. No tokens in `.env`.
+
 ## Verified live (3 Sept 2026)
 
 - Anthropic `claude-opus-5`, Gemini `gemini-3.8-flash`, OpenAI `gpt-5.4-mini`

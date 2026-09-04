@@ -1,8 +1,9 @@
 # Roadmap to v1.0 — production-ready, audited
 
-Status (3 Sept 2026): phases 0 and 1 done and reviewed; all four provider
-kinds verified live. Phase 2 (admin panel, setup wizard) built; review
-pending. Next: phase 3, Telegram and Discord.
+Status (4 Sept 2026): phases 0 to 2 done and reviewed; all four provider
+kinds verified live; the panel checked in a real browser. Phase 3 (channel
+adapter, Telegram, Discord) built; review pending; live test needs bot
+tokens. Next: phase 4, memory quality.
 
 v0.1 (Sept 2026) proved the loop: log a group, hybrid-search it, answer with a
 quote-reply, refuse when unsure, log everything. v1.0 turns that into a system

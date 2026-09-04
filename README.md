@@ -21,14 +21,23 @@ quote of the message it came from, or says it does not know.
 - Any LLM: Anthropic, Gemini, or anything OpenAI-compatible (OpenAI,
   OpenRouter, a LiteLLM proxy, Groq, Mistral, Together, Ollama). Keys are
   encrypted at rest. One global default, overridable per group.
+- Channels: WhatsApp (paired phone), Telegram (bot token) and Discord (bot
+  token), all through one gateway, mixed freely across groups. Set them up
+  on the Channels page; the gateway picks changes up within 30 seconds.
 - Monthly budget caps per group and globally, member opt-out, quiet hours,
   retention. Every question is logged with retrieved chunks, timings, tokens
   and cost.
 - Embeddings and the reranker run locally on CPU. No chat text leaves the box
   until the answer step.
 
-Status: v0.4 (roadmap phase 2). Admin panel and setup wizard at
+Status: v0.5 (roadmap phase 3). Admin panel and setup wizard at
 `http://localhost:8000/admin`. See `ROADMAP.md`.
+
+Telegram: create the bot with @BotFather, run `/setprivacy` → Disable so it
+sees every group message, add it to the group. Discord: create an
+application, add a bot, enable the Message Content intent, invite it with
+Read Messages, Send Messages and Read Message History. Paste the tokens on
+the Channels page, then enable the groups that appear.
 
 ## Quickstart
 
@@ -94,9 +103,10 @@ never saw.
 
 ## How it works
 
-- `gateway/` — Node + Baileys. Pulls the group list from the app, forwards
-  messages, detects triggers, sends quote-replies. Failed deliveries wait in
-  an on-disk queue. No business logic.
+- `gateway/` — Node. One module per channel under `channels/` (Baileys,
+  grammY, discord.js) over a shared core that pulls groups and channel
+  configs from the app, forwards messages, and sends quote-replies. Failed
+  deliveries wait in an on-disk queue. No business logic.
 - `app/` — Python + FastAPI, one process. Ingest, a 60-second chunking loop,
   retrieval, providers, admin API, retention. Applies `app/migrations/*.sql`
   at startup. `/health` and `/metrics` for monitoring; logs are JSON lines.
