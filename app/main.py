@@ -147,16 +147,14 @@ def ask(q: Question):
     if q.sender_jid in s["opt_out"] or groups.in_quiet_hours(s):
         observe.count("ask_total", outcome="suppressed")
         return {"answer": None, "quote": None}
-    corrected = asking.try_correction(q, group)
-    if corrected:
-        return corrected
-    res = asking.answer_in(q, group)
+    res = asking.try_correction(q, group) or asking.answer_in(q, group)
     log.info(
         "ask",
         extra={
             "group": q.group_id,
-            "confidence": round(res["confidence"], 3),
-            "refused": res["quote"] is None,
+            "outcome": res["outcome"],
+            "confidence": round(res.get("confidence") or 0.0, 3),
+            "latency_ms": (res.get("timings") or {}).get("total_ms"),
         },
     )
     return {"answer": res["answer"], "quote": res["quote"]}

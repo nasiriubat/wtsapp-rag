@@ -1,7 +1,6 @@
 """The decision tree behind /ask: refuse, correct, answer, or stay silent.
 main.py owns the HTTP shape; this owns what happens to a question."""
 
-import json
 import re
 import time
 
@@ -13,6 +12,7 @@ import gateway_state
 import groups
 import observe
 import providers
+import query_log
 import retrieval
 
 NO_PROVIDER = "No LLM provider is configured yet. Ask the admin to add one."
@@ -21,6 +21,7 @@ NO_DM_GROUP = "I can only answer privately about groups you are in and that allo
 CORRECTION = re.compile(
     r"^\s*(?:(?:wrong|nope|actually|correction|väärin|korjaus)[\s,.:!-]*|(?:no|ei)[,.:!-]\s*)", re.I
 )
+DM_CANDIDATES = 5
 
 
 def _source(chunk):
@@ -42,42 +43,7 @@ def _cite(text, src, group_name=None):
     return text, {k: src[k] for k in ("wa_msg_id", "sender_jid", "is_bot", "body")}
 
 
-def log_question(
-    q, group_id, chunks, timings, text, confidence, tokens, provider, cost, outcome, fact_ids=()
-):
-    retrieved = {
-        "chunks": [{"chunk_id": c["id"], "score": c["score"], "source": c["source"]} for c in chunks],
-        "facts": list(fact_ids),
-        "timings": timings,
-    }
-    with db.connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO query_log
-              (group_id, sender_jid, question, retrieved, answer, confidence,
-               tokens_in, tokens_out, latency_ms, provider_id, cost, outcome)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                group_id,
-                q.sender_jid,
-                q.question,
-                json.dumps(retrieved),
-                text,
-                confidence,
-                tokens[0],
-                tokens[1],
-                timings.get("total_ms"),
-                provider["id"] if provider else None,
-                cost,
-                outcome,
-            ),
-        )
-
-
 def _quoted_bot_message(group_id, quoted_msg_id):
-    if not quoted_msg_id:
-        return None
     with db.connect() as conn:
         return conn.execute(
             "SELECT body, ts FROM messages WHERE group_id = %s AND wa_msg_id = %s AND is_bot",
@@ -89,11 +55,13 @@ def try_correction(q, group):
     """A reply to one of our answers that starts with "wrong"/"actually" is a
     correction: stored as a fact that supersedes what that answer was built on."""
     m = CORRECTION.match(q.question)
-    quoted = _quoted_bot_message(q.group_id, q.quoted_msg_id)
-    if not m or quoted is None:
+    if not m or not q.quoted_msg_id:
         return None
     statement = q.question[m.end() :].strip()
     if not statement:
+        return None
+    quoted = _quoted_bot_message(q.group_id, q.quoted_msg_id)
+    if quoted is None:
         return None
     with db.connect() as conn:
         original = conn.execute(
@@ -103,15 +71,21 @@ def try_correction(q, group):
     related = (original["retrieved"] or {}).get("facts", []) if original else []
     facts.correct(q.group_id, statement, q.sender_jid, q.wa_msg_id, quoted["ts"], related)
     observe.count("ask_total", outcome="correction")
-    log_question(q, q.group_id, [], {}, statement, None, (None, None), None, None, "correction")
-    return {"answer": group["settings"]["correction_ack"], "quote": None}
+    query_log.record(
+        group_id=q.group_id,
+        sender_jid=q.sender_jid,
+        question=q.question,
+        answer=statement,
+        outcome="correction",
+    )
+    return {"answer": group["settings"]["correction_ack"], "quote": None, "outcome": "correction"}
 
 
-def answer_in(q, group, cite_group=False):
-    """Answer a question from one group. Returns the response dict."""
+def answer_in(q, group, cite_group=False, found=None):
+    """Answer a question from one group. `found` reuses a search already done."""
     s = group["settings"]
     t0 = time.perf_counter()
-    chunks, timings = retrieval.search(group["external_id"], q.question)
+    chunks, timings = found or retrieval.search(group["external_id"], q.question)
     confidence = chunks[0]["score"] if chunks else 0.0
     text, quote, tokens, cost, provider = s["refusal_text"], None, (None, None), None, None
     outcome, fact_ids = "refused", []
@@ -135,24 +109,25 @@ def answer_in(q, group, cite_group=False):
                 text = s["refusal_text"]
             else:
                 text, quote = _cite(text, _source(chunks[0]), group["name"] if cite_group else None)
-                outcome = "answered" if not cite_group else "dm"
+                outcome = "dm" if cite_group else "answered"
     timings["total_ms"] = round((time.perf_counter() - t0) * 1000)
     observe.count("ask_total", outcome=outcome)
     observe.observe_latency(timings["total_ms"] / 1000)
-    log_question(
-        q,
-        group["external_id"],
-        chunks,
-        timings,
-        text,
-        confidence,
-        tuple(tokens),
-        provider,
-        cost,
-        outcome,
-        fact_ids,
+    query_log.record(
+        group_id=group["external_id"],
+        sender_jid=q.sender_jid,
+        question=q.question,
+        answer=text,
+        outcome=outcome,
+        chunks=chunks,
+        fact_ids=fact_ids,
+        timings=timings,
+        confidence=confidence,
+        tokens=tuple(tokens),
+        provider=provider,
+        cost=cost,
     )
-    return {"answer": text, "quote": quote, "confidence": confidence}
+    return {"answer": text, "quote": quote, "outcome": outcome, "confidence": confidence, "timings": timings}
 
 
 def answer_privately(q):
@@ -161,11 +136,11 @@ def answer_privately(q):
     candidates = groups.dm_candidates(q.sender_jid, gateway_state.members())
     if not candidates:
         observe.count("ask_total", outcome="dm_unknown")
-        return {"answer": NO_DM_GROUP, "quote": None}
-    best, best_score = None, -1.0
-    for g in candidates[:5]:
-        hits, _ = retrieval.search(g["external_id"], q.question)
-        score = hits[0]["score"] if hits else 0.0
+        return {"answer": NO_DM_GROUP, "quote": None, "outcome": "dm_unknown"}
+    best, best_found, best_score = None, None, -1.0
+    for g in candidates[:DM_CANDIDATES]:
+        found = retrieval.search(g["external_id"], q.question)
+        score = found[0][0]["score"] if found[0] else 0.0
         if score > best_score:
-            best, best_score = g, score
-    return answer_in(q, best, cite_group=True)
+            best, best_found, best_score = g, found, score
+    return answer_in(q, best, cite_group=True, found=best_found)
