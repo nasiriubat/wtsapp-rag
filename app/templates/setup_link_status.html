@@ -1,0 +1,14 @@
+{% if gateway.connected %}
+<p class="ok">✓ Linked as {{ gateway.jid }}. The number is in {{ gateway.groups | length }} group{{ 's' if gateway.groups|length != 1 }}.</p>
+<a href="/setup/groups" role="button">Next: pick groups</a>
+{% elif svg %}
+<div style="max-width: 20rem">{{ svg | safe }}</div>
+<p class="muted">The code refreshes on its own. Keep this page open while you scan.</p>
+{% elif gateway.relink %}
+<p>Restarting the gateway for a fresh QR…</p>
+{% elif gateway.reported_at %}
+<p class="bad">Gateway is reporting but has neither a QR nor a link. It is probably reconnecting; if this stays, check
+<code>docker compose logs gateway</code>.</p>
+{% else %}
+<p class="bad">The gateway has not reported. Is it running? <code>docker compose ps</code> and <code>docker compose logs gateway</code>.</p>
+{% endif %}

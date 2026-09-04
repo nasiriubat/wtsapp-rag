@@ -70,6 +70,8 @@ app.include_router(admin_api.router)
 app.include_router(admin.public)
 app.include_router(admin.router)
 app.include_router(admin.forms)
+app.include_router(admin.setup_pages)
+app.include_router(admin.setup_forms)
 app.mount(
     "/static", StaticFiles(directory=str(pathlib.Path(__file__).resolve().parent / "static")), name="static"
 )

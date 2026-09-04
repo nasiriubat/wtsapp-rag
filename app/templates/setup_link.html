@@ -1,0 +1,9 @@
+{% extends "setup_base.html" %}
+{% block step %}
+<p>On the phone with the dedicated number: WhatsApp → Linked devices → Link a device, then scan.</p>
+<div hx-get="/setup/link/status" hx-trigger="load, every 3s" hx-swap="innerHTML">Waiting for the gateway…</div>
+<form method="post" action="/setup/link/relink" onsubmit="return confirm('Unlink and show a new QR? The gateway restarts.')" style="margin-top:2rem">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button class="secondary outline">Relink with a new QR</button>
+</form>
+{% endblock %}

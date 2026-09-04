@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Setup{% endblock %}
+{% block body %}
+<h2>Setup</h2>
+<nav aria-label="steps"><ul>
+  {% for s in steps %}<li>{% if s == step %}<strong>{{ loop.index }}. {{ s }}</strong>{% else %}<a href="/setup{{ '' if s == 'preflight' else '/' + s }}" class="muted">{{ loop.index }}. {{ s }}</a>{% endif %}</li>{% endfor %}
+</ul></nav>
+{% block step %}{% endblock %}
+{% endblock %}

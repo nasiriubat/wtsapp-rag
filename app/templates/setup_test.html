@@ -1,0 +1,12 @@
+{% extends "setup_base.html" %}
+{% block step %}
+{% if created %}<p class="ok">✓ Enabled {{ created }} group{{ 's' if created != 1 }}. The gateway picks them up within 30 seconds.</p>{% endif %}
+{% if groups %}
+<p>In <strong>{{ groups[0].name or groups[0].external_id }}</strong>, send:</p>
+<pre>{{ groups[0].settings.triggers[0] }} hello</pre>
+<p>Then ask something the group has talked about. The reply is a quote of the message it came from.</p>
+<div hx-get="/setup/test/status?since={{ since }}" hx-trigger="load, every 3s" hx-swap="innerHTML"></div>
+{% else %}
+<p class="bad">No enabled groups. <a href="/setup/groups">Pick one</a> first.</p>
+{% endif %}
+{% endblock %}

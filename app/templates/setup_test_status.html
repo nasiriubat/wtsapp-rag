@@ -1,0 +1,10 @@
+{% if row %}
+<article>
+  <p class="ok">✓ Round trip works.</p>
+  <p><strong>{{ row.name or 'Group' }} asked:</strong> {{ row.question }}</p>
+  <p><strong>Answered:</strong> {{ row.answer }}</p>
+</article>
+<a href="/admin" role="button">Done: open the admin</a>
+{% else %}
+<p class="muted">Waiting for the first question…</p>
+{% endif %}

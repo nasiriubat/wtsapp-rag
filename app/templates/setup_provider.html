@@ -1,0 +1,26 @@
+{% extends "setup_base.html" %}
+{% block step %}
+{% if tested %}<p class="{{ 'ok' if tested.startswith('ok') else 'bad' }}">Test {{ tested }}</p>{% endif %}
+{% if providers %}
+<p class="ok">✓ {{ providers | length }} provider{{ 's' if providers|length > 1 }} configured:
+  {% for p in providers %}{{ p.name }} ({{ p.model }}){% if not loop.last %}, {% endif %}{% endfor %}.
+  Prices and more on the <a href="/admin/providers">Providers</a> page.</p>
+<a href="/setup/link" role="button">Next: link WhatsApp</a>
+{% else %}
+<p>Paste one API key. The wizard makes one real call to confirm it works.</p>
+{% endif %}
+<details {% if not providers %}open{% endif %}>
+  <summary>Add a provider</summary>
+  <form method="post" action="/setup/provider">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid">
+      <label>Kind <select name="kind">{% for k in kinds %}<option>{{ k }}</option>{% endfor %}</select></label>
+      <label>Model <input name="model" placeholder="claude-sonnet-5 · gemini-3.8-flash · gpt-5.4-mini" required></label>
+    </div>
+    <label>API key <input name="api_key" type="password" autocomplete="new-password" required></label>
+    <label>Base URL <small class="muted">only for OpenAI-compatible servers other than OpenAI (OpenRouter, LiteLLM, Ollama…)</small>
+      <input name="base_url" placeholder="https://openrouter.ai/api/v1"></label>
+    <button>Add and test</button>
+  </form>
+</details>
+{% endblock %}

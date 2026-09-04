@@ -1,0 +1,16 @@
+{% extends "setup_base.html" %}
+{% block step %}
+<p>Under ten minutes from here to the first answer. Each failing check names its fix.</p>
+<table>
+  <tbody>
+  {% for state, name, detail in checks %}
+    <tr>
+      <td>{% if state == 'ok' %}<span class="ok">✓</span>{% elif state == 'warn' %}<span style="color:orange">⚠</span>{% else %}<span class="bad">✗</span>{% endif %}</td>
+      <td><strong>{{ name }}</strong></td>
+      <td>{{ detail }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<a href="/setup/provider" role="button">Next: LLM provider</a>
+{% endblock %}

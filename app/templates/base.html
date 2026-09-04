@@ -23,7 +23,8 @@
   <ul><li><strong>Group assistant</strong></li></ul>
   <ul>
     {% for href, label in [("/admin", "Health"), ("/admin/questions", "Questions"), ("/admin/groups", "Groups"),
-                           ("/admin/providers", "Providers"), ("/admin/cost", "Cost"), ("/admin/data", "Data")] %}
+                           ("/admin/providers", "Providers"), ("/admin/cost", "Cost"), ("/admin/data", "Data"),
+                           ("/setup", "Setup")] %}
     <li><a href="{{ href }}" class="{{ 'active' if request.url.path == href or (href != '/admin' and request.url.path.startswith(href)) else '' }}">{{ label }}</a></li>
     {% endfor %}
     <li><form method="post" action="/admin/logout" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline" style="padding:0.25rem 0.75rem">Log out</button></form></li>

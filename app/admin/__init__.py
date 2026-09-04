@@ -15,6 +15,10 @@ escape = html.escape
 public = APIRouter(prefix="/admin")
 router = APIRouter(prefix="/admin", dependencies=[Depends(auth.require_session)])
 forms = APIRouter(prefix="/admin", dependencies=[Depends(auth.require_session), Depends(auth.require_csrf)])
+setup_pages = APIRouter(prefix="/setup", dependencies=[Depends(auth.require_session)])
+setup_forms = APIRouter(
+    prefix="/setup", dependencies=[Depends(auth.require_session), Depends(auth.require_csrf)]
+)
 
 
 def render(request, name, **ctx):
@@ -58,10 +62,14 @@ from admin import (  # noqa: E402  (pages import this module)
     pages_groups,
     pages_providers,
     pages_questions,
+    setup,
 )
 
-# "/admin" itself; a sub-router cannot own an empty path.
+# "/admin" and "/setup" themselves; a sub-router cannot own an empty path.
 router.add_api_route("", health.page, methods=["GET"])
+setup_pages.add_api_route("", setup.preflight, methods=["GET"])
+setup_pages.include_router(setup.pages)
+setup_forms.include_router(setup.actions)
 for module in (pages_providers, pages_groups, pages_questions, pages_cost, pages_data):
     router.include_router(module.pages)
     forms.include_router(module.actions)
