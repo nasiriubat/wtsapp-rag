@@ -32,7 +32,7 @@ def login_page(request: Request):
 
 @public.post("/login")
 def login(request: Request, password: str = Form()):
-    if not auth.check_password(password):
+    if not auth.check_password(password, request.client.host if request.client else "?"):
         return templates.TemplateResponse(
             request, "login.html", {"error": "Wrong password."}, status_code=401
         )
@@ -55,8 +55,10 @@ def logout():
     return res
 
 
-from admin import (  # noqa: E402  (pages import this module)
-    health,
+# Pages import this module for the routers above, so they load last. health and
+# setup register their index pages on the prefixed routers directly.
+from admin import (  # noqa: E402
+    health,  # noqa: F401
     pages_cost,
     pages_data,
     pages_groups,
@@ -65,9 +67,6 @@ from admin import (  # noqa: E402  (pages import this module)
     setup,
 )
 
-# "/admin" and "/setup" themselves; a sub-router cannot own an empty path.
-router.add_api_route("", health.page, methods=["GET"])
-setup_pages.add_api_route("", setup.preflight, methods=["GET"])
 setup_pages.include_router(setup.pages)
 setup_forms.include_router(setup.actions)
 for module in (pages_providers, pages_groups, pages_questions, pages_cost, pages_data):

@@ -10,24 +10,24 @@ from itsdangerous import BadSignature, TimestampSigner
 
 COOKIE = "admin_session"
 MAX_AGE = 7 * 86400
-_failures = {"count": 0, "until": 0.0}
+_failures = {}  # client address -> {"count", "until"}; one client cannot lock out another
 
 
 def _signer():
     return TimestampSigner(os.environ["SECRET_KEY"], salt="admin-session")
 
 
-def check_password(password):
+def check_password(password, client):
     now = time.time()
-    if now < _failures["until"]:
+    f = _failures.setdefault(client, {"count": 0, "until": 0.0})
+    if now < f["until"]:
         raise HTTPException(429, "too many attempts; wait a minute")
-    ok = secrets.compare_digest(password.encode(), os.environ["ADMIN_PASSWORD"].encode())
-    if ok:
-        _failures.update(count=0, until=0.0)
+    if secrets.compare_digest(password.encode(), os.environ["ADMIN_PASSWORD"].encode()):
+        _failures.pop(client, None)
         return True
-    _failures["count"] += 1
-    if _failures["count"] >= 5:
-        _failures.update(count=0, until=now + 60)
+    f["count"] += 1
+    if f["count"] >= 5:
+        f.update(count=0, until=now + 60)
     return False
 
 

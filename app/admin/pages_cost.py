@@ -1,15 +1,15 @@
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import ValidationError
 
 import admin
 import audit
+import budget
 import db
 import groups
 
 pages = APIRouter()
 actions = APIRouter()
-
-MONTH = "ts >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'"
 
 
 @pages.get("/cost", response_class=HTMLResponse)
@@ -21,7 +21,7 @@ def page(request: Request):
                    coalesce(sum(q.cost), 0) AS cost, coalesce(sum(q.tokens_in), 0) AS tokens_in,
                    coalesce(sum(q.tokens_out), 0) AS tokens_out
             FROM query_log q LEFT JOIN providers p ON p.id = q.provider_id
-            WHERE {MONTH} GROUP BY p.name ORDER BY cost DESC
+            WHERE {budget.MONTH_SQL} GROUP BY p.name ORDER BY cost DESC
             """
         ).fetchall()
         by_group = conn.execute(
@@ -29,7 +29,7 @@ def page(request: Request):
             SELECT coalesce(g.name, q.group_id) AS name, g.settings->>'monthly_cap_eur' AS cap,
                    count(*) AS n, coalesce(sum(q.cost), 0) AS cost
             FROM query_log q LEFT JOIN groups g ON g.external_id = q.group_id
-            WHERE {MONTH} GROUP BY g.name, q.group_id, cap ORDER BY cost DESC
+            WHERE {budget.MONTH_SQL} GROUP BY g.name, q.group_id, cap ORDER BY cost DESC
             """
         ).fetchall()
         by_day = conn.execute(
@@ -55,7 +55,10 @@ def page(request: Request):
 
 @actions.post("/cost/cap")
 def set_cap(monthly_cap_eur: str = Form("")):
-    value = float(monthly_cap_eur) if monthly_cap_eur.strip() else None
-    groups.set_global(monthly_cap_eur=value)
+    try:
+        value = float(monthly_cap_eur) if monthly_cap_eur.strip() else None
+        groups.set_global(monthly_cap_eur=value)
+    except (ValueError, ValidationError) as e:
+        raise HTTPException(422, f"monthly cap: {e}") from e
     audit.log("settings.update", "global", {"monthly_cap_eur": value})
     return RedirectResponse("/admin/cost", status_code=303)

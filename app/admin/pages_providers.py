@@ -37,7 +37,7 @@ def page(request: Request, message: str | None = None):
         "providers.html",
         providers=providers.list_all(),
         default_id=groups.global_settings()["default_provider_id"],
-        kinds=KIND_HELP,
+        kinds={k: KIND_HELP.get(k, "") for k in providers.KINDS},
         message=message,
     )
 
@@ -53,14 +53,17 @@ def create(
     price_out: float = Form(0),
     options: str = Form(""),
 ):
-    if kind not in providers.KINDS:
-        raise HTTPException(422, "unknown kind")
-    row = providers.create(
-        name, kind, api_key, model, base_url or None, price_in, price_out, _options(options)
-    )
-    audit.log("provider.create", str(row["id"]), {"name": name, "kind": kind, "model": model})
-    if groups.global_settings()["default_provider_id"] is None:
-        groups.set_global(default_provider_id=row["id"])
+    fields = {
+        "name": name,
+        "kind": kind,
+        "api_key": api_key,
+        "model": model,
+        "base_url": base_url or None,
+        "price_in": price_in,
+        "price_out": price_out,
+        "options": _options(options),
+    }
+    admin_api.add_provider(fields)
     return RedirectResponse("/admin/providers", status_code=303)
 
 
@@ -87,9 +90,7 @@ def update(
     }
     if api_key:
         fields["api_key"] = api_key
-    if providers.update(provider_id, **fields) is None:
-        raise HTTPException(404)
-    audit.log("provider.update", str(provider_id), fields)
+    admin_api.apply_provider(provider_id, fields)
     return RedirectResponse("/admin/providers", status_code=303)
 
 
@@ -102,6 +103,8 @@ def delete(provider_id: int):
 
 @actions.post("/providers/{provider_id}/default")
 def make_default(provider_id: int):
+    if providers.get(provider_id) is None:
+        raise HTTPException(404)
     groups.set_global(default_provider_id=provider_id)
     audit.log("settings.update", "global", {"default_provider_id": provider_id})
     return RedirectResponse("/admin/providers", status_code=303)
@@ -112,5 +115,5 @@ def test(provider_id: int):
     try:
         reply = admin_api.run_provider_test(provider_id)
     except HTTPException as e:
-        return HTMLResponse(f'<span class="bad">Failed: {admin.escape(e.detail)}</span>')
+        return HTMLResponse(f'<span class="bad">Failed: {admin.escape(str(e.detail))}</span>')
     return HTMLResponse(f'<span class="ok">OK, replied "{admin.escape(reply[:60])}"</span>')

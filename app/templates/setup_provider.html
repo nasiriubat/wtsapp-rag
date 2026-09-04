@@ -1,6 +1,9 @@
 {% extends "setup_base.html" %}
 {% block step %}
-{% if tested %}<p class="{{ 'ok' if tested.startswith('ok') else 'bad' }}">Test {{ tested }}</p>{% endif %}
+{% if ok is not none %}
+  {% if ok %}<p class="ok">✓ Test passed, the model replied "{{ detail }}".</p>
+  {% else %}<p class="bad">✗ Test failed: {{ detail }}. The provider was saved; fix the key or model on the <a href="/admin/providers">Providers</a> page.</p>{% endif %}
+{% endif %}
 {% if providers %}
 <p class="ok">✓ {{ providers | length }} provider{{ 's' if providers|length > 1 }} configured:
   {% for p in providers %}{{ p.name }} ({{ p.model }}){% if not loop.last %}, {% endif %}{% endfor %}.

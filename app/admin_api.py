@@ -1,4 +1,5 @@
-"""Admin JSON API. One admin, HTTP Basic, every write audited."""
+"""Admin JSON API. One admin, HTTP Basic, every write audited. The panel
+calls the same add/apply helpers, so validation lives here once."""
 
 import os
 import secrets
@@ -6,7 +7,7 @@ import secrets
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 import audit
 import db
@@ -26,14 +27,11 @@ def require_admin(creds: HTTPBasicCredentials = Depends(basic)):
 router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
 
 
-def _patch(update, target_id, fields, action):
-    if not fields:
-        raise HTTPException(422, "nothing to update")
-    row = update(target_id, **fields)
-    if row is None:
-        raise HTTPException(404)
-    audit.log(action, str(target_id), fields)
-    return row
+def _validate(model, fields):
+    try:
+        return model(**fields)
+    except ValidationError as e:
+        raise HTTPException(422, str(e)) from e
 
 
 # --- providers -------------------------------------------------------------
@@ -62,33 +60,30 @@ class ProviderPatch(BaseModel):
     enabled: bool | None = None
 
 
-@router.get("/providers")
-def list_providers():
-    return providers.list_all()
-
-
-@router.post("/providers", status_code=201)
-def create_provider(body: ProviderIn):
+def add_provider(fields):
+    """Validate, create, audit, and make it the default if there is none."""
+    body = _validate(ProviderIn, fields)
     if body.kind not in providers.KINDS:
         raise HTTPException(422, f"kind must be one of {sorted(providers.KINDS)}")
     row = providers.create(**body.model_dump())
     audit.log("provider.create", str(row["id"]), body.model_dump())
+    if groups.global_settings()["default_provider_id"] is None:
+        groups.set_global(default_provider_id=row["id"])
     return row
 
 
-@router.patch("/providers/{provider_id}")
-def patch_provider(provider_id: int, body: ProviderPatch):
-    return _patch(providers.update, provider_id, body.model_dump(exclude_none=True), "provider.update")
-
-
-@router.delete("/providers/{provider_id}", status_code=204)
-def delete_provider(provider_id: int):
-    providers.delete(provider_id)
-    audit.log("provider.delete", str(provider_id))
+def apply_provider(provider_id, fields):
+    clean = _validate(ProviderPatch, fields).model_dump(exclude_none=True)
+    if not clean:
+        raise HTTPException(422, "nothing to update")
+    row = providers.update(provider_id, **clean)
+    if row is None:
+        raise HTTPException(404)
+    audit.log("provider.update", str(provider_id), clean)
+    return row
 
 
 def run_provider_test(provider_id):
-    """Shared by the JSON API and the panel's test button."""
     provider = providers.get(provider_id)
     if provider is None:
         raise HTTPException(404)
@@ -100,6 +95,27 @@ def run_provider_test(provider_id):
         raise HTTPException(502, f"unreachable: {e}") from e
     audit.log("provider.test", str(provider_id), {"reply": reply})
     return reply
+
+
+@router.get("/providers")
+def list_providers():
+    return providers.list_all()
+
+
+@router.post("/providers", status_code=201)
+def create_provider(body: ProviderIn):
+    return add_provider(body.model_dump())
+
+
+@router.patch("/providers/{provider_id}")
+def patch_provider(provider_id: int, body: ProviderPatch):
+    return apply_provider(provider_id, body.model_dump(exclude_none=True))
+
+
+@router.delete("/providers/{provider_id}", status_code=204)
+def delete_provider(provider_id: int):
+    providers.delete(provider_id)
+    audit.log("provider.delete", str(provider_id))
 
 
 @router.post("/providers/{provider_id}/test")
@@ -126,6 +142,38 @@ class GroupPatch(BaseModel):
     enabled: bool | None = None
 
 
+def add_group(fields):
+    body = _validate(GroupIn, fields)
+    if body.channel not in groups.CHANNELS:
+        raise HTTPException(422, f"channel must be one of {groups.CHANNELS}")
+    external_id = body.external_id.strip()
+    if not external_id:
+        raise HTTPException(422, "id is required")
+    if groups.get(external_id):
+        raise HTTPException(409, "group already exists")
+    row = groups.create(
+        **{**body.model_dump(), "external_id": external_id, "settings": body.settings.model_dump()}
+    )
+    audit.log("group.create", external_id, {"channel": body.channel, "name": body.name})
+    return row
+
+
+def apply_group(group_id, fields):
+    """Update, purge newly opted-out members, audit."""
+    clean = _validate(GroupPatch, fields).model_dump(exclude_unset=True)
+    if not clean:
+        raise HTTPException(422, "nothing to update")
+    if clean.get("provider_id") is not None and providers.get(clean["provider_id"]) is None:
+        raise HTTPException(422, "that provider no longer exists")
+    row, purged = groups.apply(group_id, **clean)
+    if row is None:
+        raise HTTPException(404)
+    audit.log("group.update", str(group_id), clean)
+    for sender, n in purged:
+        audit.log("member.purge", row["external_id"], {"sender": sender, "messages": n})
+    return row
+
+
 @router.get("/groups")
 def list_groups():
     return groups.list_all()
@@ -133,24 +181,7 @@ def list_groups():
 
 @router.post("/groups", status_code=201)
 def create_group(body: GroupIn):
-    if groups.get(body.external_id):
-        raise HTTPException(409, "group already exists")
-    row = groups.create(**{**body.model_dump(), "settings": body.settings.model_dump()})
-    audit.log("group.create", body.external_id, body.model_dump())
-    return row
-
-
-def apply_group(group_id, fields):
-    """Shared by the JSON API and the panel: update, purge, audit."""
-    if not fields:
-        raise HTTPException(422, "nothing to update")
-    row, purged = groups.apply(group_id, **fields)
-    if row is None:
-        raise HTTPException(404)
-    audit.log("group.update", str(group_id), fields)
-    for sender, n in purged:
-        audit.log("member.purge", row["external_id"], {"sender": sender, "messages": n})
-    return row
+    return add_group(body.model_dump())
 
 
 @router.patch("/groups/{group_id}")
@@ -183,8 +214,9 @@ def put_settings(body: groups.GlobalSettings):
 def questions(limit: int = 50, before: int | None = None):
     with db.connect() as conn:
         return conn.execute(
-            "SELECT * FROM query_log WHERE (%s::bigint IS NULL OR id < %s) ORDER BY id DESC LIMIT %s",
-            (before, before, min(limit, 500)),
+            "SELECT * FROM query_log WHERE (%(before)s::bigint IS NULL OR id < %(before)s) "
+            "ORDER BY id DESC LIMIT %(limit)s",
+            {"before": before, "limit": min(limit, 500)},
         ).fetchall()
 
 
