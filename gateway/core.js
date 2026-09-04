@@ -1,9 +1,11 @@
 // What every channel shares: talking to the app, the retry queue, the
 // ingest-then-maybe-answer flow. Channels only map their platform's messages
-// to payloads and send replies.
+// to payloads, decide triggers, and send replies.
 import { createQueue } from "./queue.js";
 
-export function createCore({ appUrl, token, log }) {
+export const blankState = () => ({ connected: false, jid: null, qr: null, groups: [] });
+
+export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_FILE || "data/queue.jsonl" }) {
   // Returns { status, data }. status 0 means the app was unreachable.
   async function post(route, body) {
     try {
@@ -23,7 +25,7 @@ export function createCore({ appUrl, token, log }) {
 
   // Only outages are worth retrying. A 4xx is the app saying no to this payload.
   const retryable = (status) => status === 0 || status >= 500;
-  const queue = createQueue("data/queue.jsonl", async (route, body) => !retryable((await post(route, body)).status));
+  const queue = createQueue(queueFile, async (route, body) => !retryable((await post(route, body)).status));
   // unref: the timer must not keep a test process alive on its own.
   setInterval(() => queue.flush().catch((err) => log.error({ err: err.message }, "queue flush failed")), 10_000).unref();
 
@@ -52,19 +54,25 @@ export function createCore({ appUrl, token, log }) {
     return cfg;
   }
 
-  // One flow for every channel. `send(text, quote)` is the channel's reply
-  // primitive and returns the payload of the message it sent, or null.
-  async function handle(payload, { triggered, question, send }) {
+  // One flow for every channel. `trigger()` returns the question when the
+  // message is for us, else null; it runs after ingest so cheap channels do not
+  // pay for it on chatter. `send(text, quote)` returns the payload of the
+  // message the channel sent, or null.
+  async function handle(payload, { trigger, send }) {
     log.info(payload, "message");
-    await ingest(payload);
-    if (!triggered) return;
-    const { data: reply } = await post("/ask", {
-      question,
-      group_id: payload.group_id,
-      sender_jid: payload.sender_jid,
-      sender_name: payload.sender_name,
-      wa_msg_id: payload.wa_msg_id,
-    });
+    const ingested = ingest(payload);
+    const question = await trigger();
+    if (question === null || question === undefined) return ingested;
+    const [{ data: reply }] = await Promise.all([
+      post("/ask", {
+        question,
+        group_id: payload.group_id,
+        sender_jid: payload.sender_jid,
+        sender_name: payload.sender_name,
+        wa_msg_id: payload.wa_msg_id,
+      }),
+      ingested,
+    ]);
     // answer: null means the app chose silence (quiet hours, opt-out, disabled).
     if (!reply?.answer) return;
     const sent = await send(reply.answer, reply.quote);
@@ -72,8 +80,6 @@ export function createCore({ appUrl, token, log }) {
   }
 
   return {
-    post,
-    ingest,
     refresh,
     handle,
     groupFor: (externalId) => groups.get(externalId),

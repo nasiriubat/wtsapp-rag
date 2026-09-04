@@ -1,8 +1,10 @@
 import { ChannelType, Client, GatewayIntentBits } from "discord.js";
+import { blankState } from "../core.js";
 import { hasPrefix, stripPrefix } from "../lib.js";
 
 export const groupId = (channelId) => `dc:${channelId}`;
 export const messageId = (id) => `dc:${id}`;
+export const parseMessageId = (id) => id.split(":")[1];
 const LIMIT = 2000; // Discord's message length cap
 
 // `m` is a discord.js Message; only plain fields are read so tests can pass objects.
@@ -19,23 +21,25 @@ export function payloadFromDiscord(m, botId) {
   };
 }
 
-export function discordTrigger(m, botId, triggers, repliedToBot) {
-  if (m.mentions?.users?.has?.(botId) || m.mentionedIds?.includes(botId)) return true;
-  if (repliedToBot) return true;
-  return hasPrefix(m.content ?? "", triggers);
+// The free checks first; `repliedToBot` is a thunk because finding out costs a
+// REST call on Discord.
+export async function discordTrigger(m, botId, triggers, repliedToBot) {
+  if (m.mentions.users.has(botId) || hasPrefix(m.content ?? "", triggers)) return true;
+  return m.reference?.messageId ? await repliedToBot() : false;
 }
 
 export function discordQuestion(content, botId, triggers) {
-  const cleaned = content.replace(new RegExp(`<@!?${botId}>`, "g"), " ").replace(/\s+/g, " ").trim();
-  return stripPrefix(cleaned, triggers);
+  return stripPrefix(content.replace(new RegExp(`<@!?${botId}>`, "g"), " ").replace(/\s+/g, " ").trim(), triggers);
 }
 
 export async function start(core, config, log) {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+    // An answer quoting "@everyone" from the chat must not ping anyone.
+    allowedMentions: { parse: [] },
   });
-  const state = { connected: false, jid: null, qr: null, groups: [] };
-  const report = () => core.report("discord", state);
+  const state = blankState();
+  let dead = false;
 
   function listChannels() {
     const out = [];
@@ -46,30 +50,30 @@ export async function start(core, config, log) {
     }
     return out;
   }
+  // Recomputed per report so a channel created after connect shows up.
+  const report = () => core.report("discord", { ...state, groups: state.connected ? listChannels() : [] });
 
   client.once("clientReady", () => {
-    Object.assign(state, { connected: true, jid: client.user.tag, groups: listChannels() });
+    Object.assign(state, { connected: true, jid: client.user.tag });
     log.info({ tag: client.user.tag }, "discord connected");
     report();
   });
-  client.on("messageCreate", async (m) => {
+  client.on("messageCreate", (m) => {
     // Other bots are noise; our own sends are ingested on the way out.
     if (!m.guildId || m.author.bot) return;
     const group = core.groupFor(groupId(m.channelId));
     if (!group) return;
     const payload = payloadFromDiscord(m, client.user.id);
     if (payload.body === null) return;
-    let repliedToBot = false;
-    if (m.reference?.messageId) {
-      const ref = await m.fetchReference().catch(() => null);
-      repliedToBot = ref?.author?.id === client.user.id;
-    }
-    await core
+    const repliedToBot = async () => (await m.fetchReference().catch(() => null))?.author?.id === client.user.id;
+    core
       .handle(payload, {
-        triggered: discordTrigger(m, client.user.id, group.triggers, repliedToBot),
-        question: discordQuestion(m.content, client.user.id, group.triggers),
+        trigger: async () =>
+          (await discordTrigger(m, client.user.id, group.triggers, repliedToBot))
+            ? discordQuestion(m.content, client.user.id, group.triggers)
+            : null,
         send: async (answer, quote) => {
-          const messageReference = quote ? quote.wa_msg_id.split(":")[1] : m.id;
+          const messageReference = quote ? parseMessageId(quote.wa_msg_id) : m.id;
           const sent = await m.channel.send({
             content: answer.slice(0, LIMIT),
             reply: { messageReference, failIfNotExists: false },
@@ -80,7 +84,12 @@ export async function start(core, config, log) {
       .catch((err) => log.error({ err: err.message }, "discord handle failed"));
   });
   client.on("error", (err) => log.error({ err: err.message }, "discord error"));
+  client.on("shardDisconnect", () => {
+    state.connected = false;
+    dead = true;
+    report();
+  });
 
   await client.login(config.token);
-  return { report, stop: () => client.destroy() };
+  return { report, dead: () => dead, stop: () => client.destroy() };
 }

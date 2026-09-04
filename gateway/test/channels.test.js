@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { payloadFromTelegram, telegramQuestion, telegramTrigger } from "../channels/telegram.js";
-import { discordQuestion, discordTrigger, payloadFromDiscord } from "../channels/discord.js";
+import { parseMessageId as tgParse, payloadFromTelegram, telegramQuestion, telegramTrigger } from "../channels/telegram.js";
+import { discordQuestion, discordTrigger, parseMessageId as dcParse, payloadFromDiscord } from "../channels/discord.js";
 
 const me = { id: 42, username: "cabin_bot" };
 const triggers = ["@agent"];
@@ -30,6 +30,7 @@ test("telegram payload is namespaced and maps the reply", () => {
     ts: "2025-09-02T08:00:00.000Z",
   });
   assert.equal(payloadFromTelegram(tg("x", { from: { id: 42, first_name: "Bot" } }), me.id).is_bot, true);
+  assert.deepEqual(tgParse("tg:-100123:7"), { chatId: -100123, messageId: 7 });
 });
 
 test("telegram triggers on @username, reply to the bot, or a prefix", () => {
@@ -50,7 +51,7 @@ function dc(content, extra = {}) {
     member: { displayName: "Anna K" },
     content,
     createdTimestamp: 1756800000000,
-    mentionedIds: [],
+    mentions: { users: new Set() },
     ...extra,
   };
 }
@@ -67,12 +68,17 @@ test("discord payload is namespaced and maps the reply", () => {
     is_bot: false,
     ts: "2025-09-02T08:00:00.000Z",
   });
+  assert.equal(dcParse("dc:900"), "900");
 });
 
-test("discord triggers on a mention, a reply to the bot, or a prefix", () => {
-  assert.equal(discordTrigger(dc(`<@${bot}> who?`, { mentionedIds: [bot] }), bot, triggers, false), true);
-  assert.equal(discordTrigger(dc("why?"), bot, triggers, true), true);
-  assert.equal(discordTrigger(dc("@agent who?"), bot, triggers, false), true);
-  assert.equal(discordTrigger(dc("who?"), bot, triggers, false), false);
+test("discord triggers on a mention, a reply to the bot, or a prefix, fetching only when needed", async () => {
+  let fetched = 0;
+  const replied = async () => (fetched++, true);
+  assert.equal(await discordTrigger(dc(`<@${bot}> who?`, { mentions: { users: new Set([bot]) } }), bot, triggers, replied), true);
+  assert.equal(await discordTrigger(dc("@agent who?"), bot, triggers, replied), true);
+  assert.equal(fetched, 0);
+  assert.equal(await discordTrigger(dc("why?", { reference: { messageId: "1" } }), bot, triggers, replied), true);
+  assert.equal(fetched, 1);
+  assert.equal(await discordTrigger(dc("who?"), bot, triggers, replied), false);
   assert.equal(discordQuestion(`<@!${bot}>  who books?`, bot, triggers), "who books?");
 });

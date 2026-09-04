@@ -2,6 +2,7 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeys
 import fs from "node:fs";
 import path from "node:path";
 import qrcode from "qrcode-terminal";
+import { blankState } from "../core.js";
 import { bare, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
 
 const AUTH_DIR = "auth_state";
@@ -14,7 +15,7 @@ function clearAuth() {
 }
 
 export async function start(core, config, log) {
-  const state = { connected: false, jid: null, qr: null, groups: [] };
+  const state = blankState();
   let sock = null;
   let relinking = false;
   let stopped = false;
@@ -56,20 +57,15 @@ export async function start(core, config, log) {
         state.connected = false;
         if (stopped) return;
         if (code === DisconnectReason.loggedOut) {
+          // Whether the admin asked or the phone unlinked us, the outcome is the
+          // same: fresh pairing, without taking the other channels down.
           clearAuth();
-          if (relinking) {
-            relinking = false;
-            log.info("logged out for relink; pairing again");
-            connect();
-          } else {
-            await report();
-            log.fatal("logged out by the phone; restart to pair again");
-            process.exit(1);
-          }
+          log.warn(relinking ? "logged out for relink; pairing again" : "logged out by the phone; pairing again");
+          relinking = false;
         } else {
           log.warn({ code }, "whatsapp closed, reconnecting");
-          connect();
         }
+        connect();
       }
       await report();
     });
@@ -91,11 +87,10 @@ export async function start(core, config, log) {
         }
         const text = textOf(msg);
         if (text === null) continue;
-        const payload = toPayload(msg, ownJid);
         core
-          .handle(payload, {
-            triggered: !msg.key.fromMe && isTrigger(msg, text, ownJids, group.triggers),
-            question: questionOf(text, group.triggers),
+          .handle(toPayload(msg, ownJid), {
+            trigger: () =>
+              !msg.key.fromMe && isTrigger(msg, text, ownJids, group.triggers) ? questionOf(text, group.triggers) : null,
             send: async (answer, quote) => {
               const quoted = quote ? quoteStub(jid, quote) : msg;
               const sent = await sock.sendMessage(jid, { text: answer }, { quoted });
@@ -111,12 +106,19 @@ export async function start(core, config, log) {
   return {
     report,
     async relink() {
-      if (relinking || !sock) return;
-      // Log out server-side; the close handler clears the auth files and
-      // reconnects, which yields a fresh QR without leaving the process.
+      // Only a live session can log out; before that there is nothing to relink.
+      if (relinking || !state.connected) {
+        log.warn("relink ignored: not connected");
+        return;
+      }
       relinking = true;
       log.warn("relink requested; logging out");
-      await sock.logout().catch((err) => log.warn({ err: err.message }, "logout failed"));
+      try {
+        await sock.logout();
+      } catch (err) {
+        relinking = false;
+        log.warn({ err: err.message }, "logout failed");
+      }
     },
     stop() {
       stopped = true;
