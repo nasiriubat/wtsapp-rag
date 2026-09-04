@@ -8,6 +8,10 @@ quote of the message it came from, or says it does not know.
 > banned. Reports in 2026 put spammy automation at two to eight weeks before a
 > ban. A read-mostly bot on a dedicated number in one group is the lowest-risk
 > profile, not a safe one. Use a number you can afford to lose.
+>
+> You can pair your own number instead, and asking from that phone works: the
+> bot tells its own replies apart from what you type. The ban risk is then
+> yours to carry on your main account.
 
 ## What it does
 

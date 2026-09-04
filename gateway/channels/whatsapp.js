@@ -21,6 +21,14 @@ export async function start(core, config, log) {
   let stopped = false;
   const report = () => core.report("whatsapp", state);
 
+  // The ids we sent ourselves. Pairing with the operator's own number makes
+  // their messages fromMe as well, so this is what tells the two apart.
+  const ourSends = new Set();
+  function remember(id) {
+    ourSends.add(id);
+    if (ourSends.size > 500) ourSends.delete(ourSends.values().next().value);
+  }
+
   async function listGroups() {
     try {
       const all = await sock.groupFetchAllParticipating();
@@ -85,7 +93,7 @@ export async function start(core, config, log) {
       for (const msg of messages) {
         const jid = msg.key.remoteJid ?? "";
         if (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid")) {
-          if (msg.key.fromMe || textOf(msg) === null) continue;
+          if (msg.key.fromMe || ourSends.has(msg.key.id) || textOf(msg) === null) continue;
           // A DM has no participant, so the chat itself identifies the sender.
           const payload = { ...toPayload(msg, ownJid), sender_jid: bare(msg.key.remoteJidAlt ?? jid) };
           core
@@ -102,14 +110,16 @@ export async function start(core, config, log) {
         }
         const text = textOf(msg);
         if (text === null) continue;
+        const ours = ourSends.has(msg.key.id);
         core
-          .handle(toPayload(msg, ownJid), {
+          .handle(toPayload(msg, ownJid, ours), {
             trigger: () =>
-              !msg.key.fromMe && isTrigger(msg, text, ownJids, group.triggers) ? questionOf(text, group.triggers) : null,
+              !ours && isTrigger(msg, text, ownJids, group.triggers) ? questionOf(text, group.triggers) : null,
             send: async (answer, quote) => {
               const quoted = quote ? quoteStub(jid, quote) : msg;
               const sent = await sock.sendMessage(jid, { text: answer }, { quoted });
-              return toPayload(sent, ownJid);
+              remember(sent.key.id);
+              return toPayload(sent, ownJid, true);
             },
           })
           .catch((err) => log.error({ err: err.message }, "whatsapp handle failed"));

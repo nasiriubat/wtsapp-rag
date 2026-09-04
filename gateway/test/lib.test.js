@@ -50,6 +50,13 @@ test("toPayload marks our own sends as bot and uses our jid", () => {
   assert.equal(p.sender_jid, OWN);
 });
 
+test("a fromMe message the bot did not send is a question, not an answer", () => {
+  // The operator paired their own number: what they type is fromMe too.
+  const p = toPayload(msg({ text: "@agent hi", fromMe: true }), OWN, false);
+  assert.equal(p.is_bot, false);
+  assert.equal(p.sender_jid, OWN);
+});
+
 test("trigger 1: a true mention of our jid or lid", () => {
   assert.equal(isTrigger(msg({ text: "@358401111111 hi", mentioned: ["358401111111:3@s.whatsapp.net"] }), "@358401111111 hi", ownJids, triggers), true);
   assert.equal(isTrigger(msg({ text: "hi", mentioned: [OWN_LID] }), "hi", ownJids, triggers), true);

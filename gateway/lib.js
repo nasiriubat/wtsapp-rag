@@ -15,7 +15,10 @@ export function bare(jid) {
   return (jid ?? "").replace(/:\d+(?=@)/, "");
 }
 
-export function toPayload(msg, ownJid) {
+// `isBot` is passed explicitly because "from me" is not the same as "from the
+// bot": when the paired number is the operator's own, their messages are
+// fromMe too, and those are questions, not answers.
+export function toPayload(msg, ownJid, isBot = msg.key.fromMe === true) {
   const key = msg.key;
   return {
     wa_msg_id: key.id,
@@ -27,7 +30,7 @@ export function toPayload(msg, ownJid) {
     sender_name: msg.pushName ?? null,
     body: textOf(msg),
     quoted_msg_id: contextOf(msg)?.stanzaId ?? null,
-    is_bot: key.fromMe === true,
+    is_bot: isBot,
     ts: new Date(Number(msg.messageTimestamp) * 1000).toISOString(),
   };
 }

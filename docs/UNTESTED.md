@@ -3,6 +3,15 @@
 Updated per phase. Everything else in the repo has a test, a CI job, or a
 recorded manual check behind it.
 
+## Verified on a real phone (5 Sept 2026)
+
+- Pairing by QR, staying connected across a gateway restart without a new
+  scan, listing the groups the number is in, and ingesting real group
+  messages with their ids, sender and timestamp.
+- That a paired **own** number reports the operator's own messages as
+  `fromMe`, which the first version mistook for the bot's own replies and
+  ignored. The gateway now tracks the ids it sent instead.
+
 ## Needs a phone (WhatsApp)
 
 - Trigger detection on a live group: mention, prefix, reply-to-bot. Unit
