@@ -36,8 +36,9 @@ quote of the message it came from, or says it does not know.
 - Embeddings and the reranker run locally on CPU. No chat text leaves the box
   until the answer step.
 
-Status: v0.5 (roadmap phase 3). Admin panel and setup wizard at
-`http://localhost:8000/admin`. See `ROADMAP.md`.
+Status: v0.7 (roadmap phase 5). Admin panel and setup wizard at
+`http://localhost:8000/admin`. Measured numbers in `docs/EVAL.md`; the plan is
+in `ROADMAP.md`.
 
 Telegram: create the bot with @BotFather, run `/setprivacy` → Disable so it
 sees every group message, add it to the group. Discord: create an
@@ -140,6 +141,13 @@ cd gateway && node --test
 CI runs all of it plus both Docker images on every push. `docs/REVIEWS.md`
 records each phase's code and security review; `docs/UNTESTED.md` lists what
 only a phone can verify.
+
+Measure a change before defending it:
+
+```
+docker compose exec -T app python scripts/eval.py evals/cabin.jsonl --provider 1 --judge 2
+docker compose exec -T app python scripts/loadtest.py --messages 500 --questions 30
+```
 
 ## License
 
