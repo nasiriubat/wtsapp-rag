@@ -23,7 +23,9 @@ quote of the message it came from, or says it does not know.
   encrypted at rest. One global default, overridable per group.
 - Channels: WhatsApp (paired phone), Telegram (bot token) and Discord (bot
   token), all through one gateway, mixed freely across groups. Set them up
-  on the Channels page; the gateway picks changes up within 30 seconds.
+  on the Channels page; the gateway picks changes up within 30 seconds. The
+  WhatsApp Cloud API is there too, for private questions on a business
+  number, which is all Meta permits it to do.
 - Decisions with history: each chunk is mined for decisions; a newer one
   supersedes the old, and answers say what changed and when. Reply "wrong,
   it's X" to an answer and the correction outranks the original.
@@ -36,9 +38,10 @@ quote of the message it came from, or says it does not know.
 - Embeddings and the reranker run locally on CPU. No chat text leaves the box
   until the answer step.
 
-Status: v0.7 (roadmap phase 5). Admin panel and setup wizard at
-`http://localhost:8000/admin`. Measured numbers in `docs/EVAL.md`; the plan is
-in `ROADMAP.md`.
+Status: v1.0. Admin panel and setup wizard at `http://localhost:8000/admin`.
+Measured numbers in [docs/EVAL.md](docs/EVAL.md), the runbook in
+[docs/OPERATIONS.md](docs/OPERATIONS.md), the threat model and its gaps in
+[SECURITY.md](SECURITY.md), what is deliberately not built in `BACKLOG.md`.
 
 Telegram: create the bot with @BotFather, run `/setprivacy` → Disable so it
 sees every group message, add it to the group. Discord: create an
@@ -148,6 +151,12 @@ Measure a change before defending it:
 docker compose exec -T app python scripts/eval.py evals/cabin.jsonl --provider 1 --judge 2
 docker compose exec -T app python scripts/loadtest.py --messages 500 --questions 30
 ```
+
+## Contributing
+
+`CONTRIBUTING.md` has the rules that get a pull request sent back, and how to
+add a channel or a provider. If you change retrieval or a prompt, run the eval
+and put the before and after in the pull request.
 
 ## License
 

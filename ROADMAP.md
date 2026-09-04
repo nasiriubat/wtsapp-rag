@@ -1,10 +1,13 @@
 # Roadmap to v1.0 — production-ready, audited
 
-Status (4 Sept 2026): phases 0 to 4 done and reviewed. All four provider kinds
-verified live; the panel checked in a real browser; Telegram and Discord await
-bot tokens for a live test. Phase 5 (eval harness, published numbers, load
-test) done: see `docs/EVAL.md`, which already changed a default. Next: phase 6
-(Cloud API, optional) and phase 7 (release).
+Status (5 Sept 2026): **v1.0 released.** All seven phases are done. Every
+provider kind was verified live, the panel was driven in a real browser, the
+eval and load numbers are published in `docs/EVAL.md` and already changed two
+defaults, and the backup and restore were rehearsed. What no test here could
+reach is listed in `docs/UNTESTED.md`: a phone for WhatsApp, bot tokens for
+Telegram and Discord, and a business number for the Cloud API.
+
+The definition of done below is kept as the record of what was built.
 
 v0.1 (Sept 2026) proved the loop: log a group, hybrid-search it, answer with a
 quote-reply, refuse when unsure, log everything. v1.0 turns that into a system

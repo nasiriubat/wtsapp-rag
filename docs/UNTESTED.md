@@ -24,6 +24,15 @@ recorded manual check behind it.
   correction reply flow (quoting a bot message then replying "wrong, …").
   The app side of all three is covered by tests through `/ask`.
 
+## Needs a WhatsApp business number
+
+- The Cloud API webhook end to end: Meta's signature over a real payload, the
+  verification handshake as Meta performs it, the Graph API version this was
+  written against (`v21.0`, which was current at the time and must be checked
+  before use), and sending inside the 24-hour window. The signature check, the
+  handshake and the payload mapping have unit tests against the documented
+  shapes.
+
 ## Needs a Telegram or Discord bot token
 
 - Telegram and Discord channels end to end: connecting, seeing groups,

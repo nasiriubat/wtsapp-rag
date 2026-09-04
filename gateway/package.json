@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
-    "discord.js": "^14.27.0",
-    "grammy": "^1.46.0",
+    "discord.js": "14.27.0",
+    "grammy": "1.46.0",
     "pino": "9.6.0",
     "qrcode-terminal": "0.12.0"
   }
