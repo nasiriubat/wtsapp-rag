@@ -32,12 +32,11 @@ def load(name, messages, threshold, decisions):
     if existing:
         wipe(external_id)
         groups.delete(existing["id"])
-    group = groups.create(
-        "whatsapp",
-        external_id,
-        name=f"eval {name}",
-        settings={"confidence_threshold": threshold, "decision_tracking": decisions},
-    )
+    # No --threshold means measure the default a real group would get.
+    settings = {"decision_tracking": decisions}
+    if threshold is not None:
+        settings["confidence_threshold"] = threshold
+    group = groups.create("whatsapp", external_id, name=f"eval {name}", settings=settings)
     with db.connect() as conn, conn.cursor() as cur:
         cur.executemany(
             "INSERT INTO messages (wa_msg_id, group_id, sender_jid, sender_name, body, ts) "
@@ -105,7 +104,7 @@ def main():
     p.add_argument("path")
     p.add_argument("--provider", type=int, help="provider id that answers; default is the global default")
     p.add_argument("--judge", type=int, required=True, help="provider id that grades")
-    p.add_argument("--threshold", type=float, default=0.1)
+    p.add_argument("--threshold", type=float, help="override the group default, to compare gates")
     p.add_argument("--no-decisions", action="store_true", help="skip fact extraction")
     p.add_argument("--keep", action="store_true", help="leave the scratch group in place")
     args = p.parse_args()

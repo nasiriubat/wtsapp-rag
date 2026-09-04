@@ -32,12 +32,18 @@ docker compose exec -T app python scripts/eval.py evals/cabin.jsonl \
 
 | Run | Set | Answering model | Judge | Questions | Answer accuracy | Citation accuracy | Abstention | False refusal | p50 | p95 | Cost/question |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2026-09-04 | cabin | gpt-5.4-mini | claude-opus-5 | 12 | 100% | 56% | 100% | 0% | 1640 ms | 1925 ms | €0.00035 |
+| 2026-09-05 | cabin | gpt-5.4-mini | claude-opus-5 | 12 | 100% | 67% | 100% | 0% | 1668 ms | 2185 ms | €0.00033 |
 | 2026-09-04 | cabin | claude-opus-5 | gpt-5.4-mini | 12 | 100% | 56% | 100% | 0% | 3448 ms | 4245 ms | €0.00744 |
 | 2026-09-04 | cabin | gpt-5.4-mini | claude-opus-5 | 12 | 56% | 60% | 100% | 44% | 1644 ms | 2761 ms | €0.00014 |
 
-The third row is the same code with `confidence_threshold` at 0.1 instead of 0,
+The first row is the shipped defaults, on the released code. The second is the
+same set answered by a much larger model: the same accuracy for twenty times
+the cost and twice the latency, which is the argument for a small model here.
+The third is the shipped code with `confidence_threshold` forced back to 0.1,
 kept as the evidence for the change below.
+
+Citation accuracy moves a few points between runs because the answer's wording
+decides which message is quoted; treat single-digit differences as noise.
 
 ## What these runs changed
 
@@ -52,7 +58,13 @@ remains for operators who would rather save provider calls than answer
 everything.
 
 **The bot quotes the message the answer came from, not the first message of the
-episode.** Citation accuracy went from 20% to 56% with that change alone.
+episode.** Citation accuracy went from 20% to 56-67% with that change alone.
+
+**The harness caught its own bug.** Re-running the eval after the release work
+showed 44% accuracy again: `scripts/eval.py` still forced a threshold of 0.1 of
+its own, so it was measuring a gate the product no longer ships. Without
+`--threshold` it now creates the group a real operator would get. Re-run the
+eval after changing a default, not only after changing the code.
 
 ## Load
 
