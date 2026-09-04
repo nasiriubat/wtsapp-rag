@@ -3,6 +3,50 @@
 One entry per phase: what the code review and security review found, and
 what was done about it. Findings that were not fixed say why.
 
+## v1.0 release — security review of the whole tree, 5 Sept 2026
+
+A review of every route, every channel, every template and every SQL
+construction site against the claims in `SECURITY.md`. It found one release
+blocker. All six findings are fixed and covered by tests.
+
+- **Blocker: one packet could kill the gateway.** The Cloud API webhook's
+  request listener was an `async` function passed to `http.createServer`, so a
+  rejection had no handler and Node ended the process. Two throws were
+  reachable before the signature check: a request target the URL parser
+  rejects, and a body that stops short of its `Content-Length`. Since that one
+  process also runs WhatsApp, Telegram and Discord, an unauthenticated request
+  every few seconds was a permanent outage for every channel. The handler is
+  wrapped now, the process logs unhandled rejections instead of dying, and
+  `gateway/test/cloud_server.test.js` drives both cases over a real socket.
+- **The JSON API was an unthrottled password oracle.** The panel's login
+  locks out after five wrong attempts; HTTP Basic on `/api` did not, so the
+  same password could be guessed at full request rate. Both paths share the
+  lockout now.
+- **Postgres, the panel and the webhook were published on every interface.**
+  Compose binds all three to loopback; whatever proxy the operator puts in
+  front is theirs to secure.
+- **Chunking flagged messages by id without the group.** Since ids are unique
+  per group, not globally, a member who chose an id seen in another group
+  could mark that group's message as chunked: never embedded, never
+  retrievable, silently. This was exactly the shadowing `SECURITY.md` claimed
+  was impossible. Fixed and tested.
+- **The image never set `--proxy-headers`**, which `SECURITY.md` named as the
+  mitigation for marking the session cookie `Secure`. Behind a proxy the
+  cookie was sent over plain HTTP and the login lockout collapsed into one
+  global bucket, so anyone could lock the admin out. Set in the Dockerfile.
+- **Private questions skipped opt-out and quiet hours.** A member who had
+  opted out could still ask privately and be answered from the group they had
+  been erased from. Both checks now apply to private questions.
+
+Also fixed from the reviewer's lower-confidence list: `/health` no longer
+returns the database connection string in its error, the CSRF comparison no
+longer raises on a non-ASCII header, and the gateway logs message metadata
+instead of message text, so `docker compose logs` is not a copy of the chat.
+
+Documented rather than fixed, in `SECURITY.md`: login itself has no CSRF
+token, and an empty member list from a channel is indistinguishable from a
+channel that cannot list members.
+
 ## Phase 4 (v0.6) — code and security review, 4 Sept 2026
 
 The review ran during a model rate limit, so three of eight code-review

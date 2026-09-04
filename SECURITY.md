@@ -44,7 +44,10 @@ panel. Everything below follows from that.
 - The gateway authenticates with a shared bearer token. `/ingest`, `/ask` and
   the gateway's config and state endpoints accept nothing without it.
 - Provider keys and channel tokens are encrypted at rest with pgcrypto using
-  `SECRET_KEY`, never returned by any endpoint, and masked in the audit log.
+  `SECRET_KEY` and masked in the audit log and the panel. A provider key is
+  never returned by any endpoint. Channel tokens are returned to the gateway
+  by `/gateway/config`, which requires `GATEWAY_TOKEN`: that token is
+  therefore worth as much as the channel tokens themselves.
 - Every admin write is recorded in `audit_log` with the actor and the change.
 
 ## What is not defended
@@ -74,3 +77,13 @@ Say these out loud before running it:
   sees the excerpts you send it.
 - **Denial of service is out of scope.** There is no request throttling beyond
   the login lockout and the monthly budget cap.
+- **Login itself has no CSRF token**, so a third party can force a visiting
+  admin's browser into a session they control. It gets them no access to this
+  instance; it can mislead the admin about which instance they are looking at.
+- **Nothing is published to the network by default.** Compose binds Postgres,
+  the panel and the webhook to loopback. Whatever you put in front of them is
+  yours to secure, and `--proxy-headers` is already set so the session cookie
+  is marked `Secure` behind a TLS proxy.
+- **A member list that comes back empty** is treated as "this channel cannot
+  list members", which falls back to "has written here". A transient empty
+  list therefore widens private access for as long as it lasts.
