@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Channels{% endblock %}
+{% block body %}
+<h2>Channels</h2>
+{% if message %}<p class="ok">{{ message }}</p>{% endif %}
+<p class="muted">Every channel forwards its groups through the same gateway. Tokens are encrypted at rest and never shown again.</p>
+
+{% for kind in kinds %}{% set row = rows.get(kind) %}{% set s = state.get(kind) %}
+<article>
+  <header>
+    <strong>{{ kind }}</strong>
+    {% if row and row.enabled %}
+      {% if s and s.connected %}<span class="ok">· connected{% if s.jid %} as {{ s.jid }}{% endif %}, {{ s.groups | length }} group{{ 's' if s.groups|length != 1 }} visible</span>
+      {% elif s and s.reported_at %}<span class="bad">· enabled, not connected</span>
+      {% else %}<span class="muted">· enabled, gateway has not reported</span>{% endif %}
+    {% elif row %}<span class="muted">· disabled</span>
+    {% else %}<span class="muted">· not set up</span>{% endif %}
+  </header>
+  {% if kind == 'whatsapp' %}
+    <p class="muted">Pairs with a phone; there is no token. {% if s and s.qr_svg %}<a href="/setup/link">A QR is waiting to be scanned.</a>{% endif %}</p>
+    <div class="grid">
+      <form method="post" action="/admin/channels/whatsapp">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label><input type="checkbox" name="enabled" value="true" {% if row and row.enabled %}checked{% endif %}> Enabled</label>
+        <button class="secondary">Save</button>
+      </form>
+      <form method="post" action="/admin/channels/whatsapp/relink" onsubmit="return confirm('Unlink and show a new QR?')">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="secondary outline">Relink with a new QR</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="muted">{{ help[kind] }}</p>
+    <form method="post" action="/admin/channels/{{ kind }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Bot token {% if row and row.configured %}<small class="muted">(stored; leave empty to keep)</small>{% endif %}
+        <input name="token" type="password" autocomplete="new-password" {% if not (row and row.configured) %}required{% endif %}></label>
+      <label><input type="checkbox" name="enabled" value="true" {% if not row or row.enabled %}checked{% endif %}> Enabled</label>
+      <div class="grid">
+        <button>Save</button>
+        {% if row %}<form method="post" action="/admin/channels/{{ kind }}/delete" onsubmit="return confirm('Remove the {{ kind }} channel?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline">Remove</button></form>{% endif %}
+      </div>
+    </form>
+  {% endif %}
+</article>
+{% endfor %}
+{% endblock %}

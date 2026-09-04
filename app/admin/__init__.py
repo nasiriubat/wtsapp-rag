@@ -59,6 +59,7 @@ def logout():
 # setup register their index pages on the prefixed routers directly.
 from admin import (  # noqa: E402
     health,  # noqa: F401
+    pages_channels,
     pages_cost,
     pages_data,
     pages_groups,
@@ -69,6 +70,6 @@ from admin import (  # noqa: E402
 
 setup_pages.include_router(setup.pages)
 setup_forms.include_router(setup.actions)
-for module in (pages_providers, pages_groups, pages_questions, pages_cost, pages_data):
+for module in (pages_providers, pages_groups, pages_questions, pages_cost, pages_data, pages_channels):
     router.include_router(module.pages)
     forms.include_router(module.actions)
