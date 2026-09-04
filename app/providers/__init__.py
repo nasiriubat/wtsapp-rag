@@ -12,15 +12,12 @@ KINDS = {"anthropic": anthropic, "gemini": gemini, "openai": openai_compat}
 _COLUMNS = "id, name, kind, base_url, model, price_in, price_out, options, enabled, created_at"
 
 
-_key = db.secret_key
-
-
 def get(provider_id):
     """Full row including the decrypted key. Never return this to a browser."""
     with db.connect() as conn:
         return conn.execute(
             f"SELECT {_COLUMNS}, pgp_sym_decrypt(api_key, %s) AS api_key FROM providers WHERE id = %s",
-            (_key(), provider_id),
+            (db.secret_key(), provider_id),
         ).fetchone()
 
 
@@ -46,7 +43,7 @@ def create(name, kind, api_key, model, base_url=None, price_in=0, price_out=0, o
                 kind,
                 base_url,
                 api_key,
-                _key(),
+                db.secret_key(),
                 model,
                 price_in,
                 price_out,
@@ -61,7 +58,7 @@ def update(provider_id, **fields):
     for k, v in fields.items():
         if k == "api_key":
             sets.append("api_key = pgp_sym_encrypt(%s, %s)")
-            params += [v, _key()]
+            params += [v, db.secret_key()]
         elif k == "options":
             sets.append("options = %s")
             params.append(json.dumps(v))

@@ -67,7 +67,7 @@ DUPLICATE = 0.97  # cosine above which a "new" fact is the old one restated
 def add(group_id, statement, kind, source_msg_id, valid_from, supersedes=(), sender_jid=None):
     """Store a fact. Returns its id, or None when it merely restates an active
     fact without replacing anything."""
-    vector = embed.literal(embed.passages([statement])[0])
+    vector = embed.passage_literal(statement)
     if not supersedes and kind == "decision":
         nearest = similar(group_id, vector, limit=1)
         if nearest and nearest[0]["score"] >= DUPLICATE:
@@ -93,7 +93,8 @@ def add(group_id, statement, kind, source_msg_id, valid_from, supersedes=(), sen
 
 def extract(chunk, provider):
     """One provider call per chunk. Returns (facts added, tokens_in, tokens_out)."""
-    vector = embed.literal(embed.passages([chunk["content"]])[0])
+    # The chunk was embedded when it was written; no need to pay for it twice.
+    vector = chunk.get("embedding") or embed.passage_literal(chunk["content"])
     related = similar(chunk["group_id"], vector)
     context = "\n".join(f"[{r['id']}] {r['valid_from']:%d %b %Y}: {r['statement']}" for r in related)
     prompt = (

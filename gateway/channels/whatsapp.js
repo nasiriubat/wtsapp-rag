@@ -85,18 +85,11 @@ export async function start(core, config, log) {
       for (const msg of messages) {
         const jid = msg.key.remoteJid ?? "";
         if (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid")) {
-          const text = textOf(msg);
-          if (msg.key.fromMe || text === null) continue;
+          if (msg.key.fromMe || textOf(msg) === null) continue;
+          // A DM has no participant, so the chat itself identifies the sender.
+          const payload = { ...toPayload(msg, ownJid), sender_jid: bare(msg.key.remoteJidAlt ?? jid) };
           core
-            .handleDirect(
-              {
-                sender_jid: bare(msg.key.remoteJidAlt ?? jid),
-                sender_name: msg.pushName ?? null,
-                wa_msg_id: msg.key.id,
-                question: text,
-              },
-              (answer) => sock.sendMessage(jid, { text: answer }, { quoted: msg }),
-            )
+            .handleDirect(payload, (answer) => sock.sendMessage(jid, { text: answer }, { quoted: msg }))
             .catch((err) => log.error({ err: err.message }, "whatsapp direct failed"));
           continue;
         }

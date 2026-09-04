@@ -80,10 +80,16 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
     if (sent) await ingest(sent);
   }
 
-  // A private message to the bot. Never stored; answered from the sender's
-  // groups with a text citation, or declined.
-  async function handleDirect({ sender_jid, sender_name, wa_msg_id, question }, send) {
-    const { data: reply } = await post("/ask", { question, group_id: null, sender_jid, sender_name, wa_msg_id });
+  // A private message to the bot, as the channel's own payload. Never stored;
+  // answered from the sender's groups with a text citation, or declined.
+  async function handleDirect(payload, send) {
+    const { data: reply } = await post("/ask", {
+      question: payload.body,
+      group_id: null,
+      sender_jid: payload.sender_jid,
+      sender_name: payload.sender_name,
+      wa_msg_id: payload.wa_msg_id,
+    });
     if (reply?.answer) await send(reply.answer);
   }
 

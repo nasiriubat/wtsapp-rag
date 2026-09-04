@@ -31,6 +31,11 @@ def query(text):
     return next(_model().embed([f"query: {text}"])).tolist()
 
 
+def passage_literal(text):
+    """The one shape callers need: embed a passage, ready for pgvector."""
+    return literal(passages([text])[0])
+
+
 def literal(vec):
     # pgvector's text input format; psycopg has no native adapter without the
     # pgvector package, and this is all that package would do for us.

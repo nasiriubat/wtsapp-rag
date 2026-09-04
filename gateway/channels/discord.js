@@ -69,13 +69,10 @@ export async function start(core, config, log) {
     // Other bots are noise; our own sends are ingested on the way out.
     if (m.author.bot) return;
     if (!m.guildId) {
-      if (!m.content) return;
-      const p = payloadFromDiscord(m, client.user.id);
+      const payload = payloadFromDiscord(m, client.user.id);
+      if (payload.body === null) return;
       core
-        .handleDirect(
-          { sender_jid: p.sender_jid, sender_name: p.sender_name, wa_msg_id: p.wa_msg_id, question: m.content },
-          (answer) => m.channel.send({ content: answer.slice(0, LIMIT) }),
-        )
+        .handleDirect(payload, (answer) => m.channel.send({ content: answer.slice(0, LIMIT) }))
         .catch((err) => log.error({ err: err.message }, "discord direct failed"));
       return;
     }

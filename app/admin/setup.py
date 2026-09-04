@@ -9,12 +9,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 import admin
 import admin_api
-import audit
 import db
 import gateway_state
 import groups
 import providers
-from admin import health
+from admin import health, pages_channels
 
 pages = APIRouter()
 actions = APIRouter()
@@ -96,9 +95,7 @@ def link_status(request: Request):
 
 @actions.post("/link/relink")
 def relink():
-    gateway_state.request_relink("whatsapp")
-    audit.log("gateway.relink", "whatsapp")
-    return RedirectResponse("/setup/link", status_code=303)
+    return pages_channels.relink("whatsapp")
 
 
 @pages.get("/groups", response_class=HTMLResponse)

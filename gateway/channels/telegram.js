@@ -49,14 +49,10 @@ export async function start(core, config, log) {
   bot.on("message", (ctx) => {
     const msg = ctx.message;
     if (msg.chat.type === "private") {
-      const text = msg.text ?? msg.caption;
-      if (!text) return;
-      const p = payloadFromTelegram(msg, me.id);
+      const payload = payloadFromTelegram(msg, me.id);
+      if (payload.body === null) return;
       core
-        .handleDirect(
-          { sender_jid: p.sender_jid, sender_name: p.sender_name, wa_msg_id: p.wa_msg_id, question: text },
-          (answer) => ctx.api.sendMessage(msg.chat.id, answer.slice(0, LIMIT)),
-        )
+        .handleDirect(payload, (answer) => ctx.api.sendMessage(msg.chat.id, answer.slice(0, LIMIT)))
         .catch((err) => log.error({ err: err.message }, "telegram direct failed"));
       return;
     }

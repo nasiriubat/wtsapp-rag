@@ -17,7 +17,6 @@ if (!TOKEN) {
 const MODULES = { whatsapp, telegram, discord };
 const core = createCore({ appUrl: APP_URL, token: TOKEN, log });
 const running = new Map();
-let syncing = false;
 
 async function stop(kind) {
   const entry = running.get(kind);
@@ -41,49 +40,43 @@ async function start(kind, config) {
   }
 }
 
+// Returns whether the app answered, which sets the next poll delay.
 async function sync() {
-  // A slow start must not let the next tick start the same channel again.
-  if (syncing) return;
-  syncing = true;
+  let cfg;
   try {
-    let cfg;
-    try {
-      cfg = await core.refresh();
-    } catch (err) {
-      log.warn({ err: err.message }, "could not load config; keeping the previous state");
-      for (const { handle } of running.values()) handle.report();
-      return;
-    }
-    const wanted = new Map(cfg.channels.map((c) => [c.kind, c]));
-    for (const [kind, entry] of [...running]) {
-      const want = wanted.get(kind);
-      if (!want || !MODULES[kind]) {
-        log.info({ kind }, "channel disabled; stopping");
-        await stop(kind);
-      } else if (JSON.stringify(want.config) !== entry.fingerprint || entry.handle.dead?.()) {
-        log.info({ kind }, entry.handle.dead?.() ? "channel died; restarting" : "channel config changed; restarting");
-        await stop(kind);
-      }
-    }
-    await Promise.all([...wanted].filter(([k]) => !running.has(k) && MODULES[k]).map(([k, c]) => start(k, c.config)));
-    for (const kind of cfg.relink ?? []) {
-      if (running.get(kind)?.handle.relink) await running.get(kind).handle.relink();
-      else log.warn({ kind }, "relink requested for a channel that is not running");
-    }
+    cfg = await core.refresh();
+  } catch (err) {
+    log.warn({ err: err.message }, "could not load config; keeping the previous state");
     for (const { handle } of running.values()) handle.report();
-  } finally {
-    syncing = false;
+    return false;
   }
+  const wanted = new Map(cfg.channels.map((c) => [c.kind, c]));
+  for (const [kind, entry] of [...running]) {
+    const want = wanted.get(kind);
+    const reason = !want || !MODULES[kind]
+      ? "channel disabled; stopping"
+      : entry.handle.dead?.()
+        ? "channel died; restarting"
+        : JSON.stringify(want.config) !== entry.fingerprint
+          ? "channel config changed; restarting"
+          : null;
+    if (reason) {
+      log.info({ kind }, reason);
+      await stop(kind);
+    }
+  }
+  await Promise.all([...wanted].filter(([k]) => !running.has(k) && MODULES[k]).map(([k, c]) => start(k, c.config)));
+  for (const kind of cfg.relink ?? []) {
+    if (running.get(kind)?.handle.relink) await running.get(kind).handle.relink();
+    else log.warn({ kind }, "relink requested for a channel that is not running");
+  }
+  for (const { handle } of running.values()) handle.report();
+  return true;
 }
 
-// The app loads its models for a while after boot; poll fast until the first
-// config arrives, then settle into the 30-second rhythm.
-async function main() {
-  while (running.size === 0) {
-    await sync();
-    if (running.size === 0) await new Promise((r) => setTimeout(r, 5_000));
-  }
-  setInterval(() => sync().catch((err) => log.error({ err: err.message }, "sync failed")), 30_000);
+// One loop, so a slow sync can never overlap the next one. The app loads its
+// models for a while after boot; poll fast until it answers.
+for (;;) {
+  const ok = await sync().catch((err) => log.error({ err: err.message }, "sync failed"));
+  await new Promise((resolve) => setTimeout(resolve, ok ? 30_000 : 5_000));
 }
-
-main();
