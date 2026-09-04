@@ -48,6 +48,10 @@ services:
     volumes:
       - ./gateway/auth_state:/app/auth_state
       - ./gateway/data:/app/data
+    ports:
+      # Only the WhatsApp Cloud API channel listens here, for Meta's webhook.
+      # Put TLS in front of it; Meta will not call plain HTTP.
+      - "8080:8080"
     # The QR is printed to stdout; read it with `docker compose logs -f gateway`.
     tty: true
     restart: unless-stopped

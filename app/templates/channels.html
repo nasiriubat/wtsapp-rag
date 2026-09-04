@@ -3,7 +3,7 @@
 {% block body %}
 <h2>Channels</h2>
 {% if message %}<p class="ok">{{ message }}</p>{% endif %}
-<p class="muted">Every channel forwards its groups through the same gateway. Tokens are encrypted at rest and never shown again.</p>
+<p class="muted">Every channel forwards through the same gateway. Secrets are encrypted at rest and never shown again.</p>
 
 {% for c in view %}
 <article>
@@ -11,10 +11,10 @@
   <p class="muted">{{ help[c.kind] }}{% if c.state.qr_svg %} <a href="/setup/link">A QR is waiting to be scanned.</a>{% endif %}</p>
   <form method="post" action="/admin/channels/{{ c.kind }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    {% if c.traits.token %}
-    <label>Bot token {% if c.row and c.row.configured %}<small class="muted">(stored; leave empty to keep)</small>{% endif %}
-      <input name="token" type="password" autocomplete="new-password" {% if not (c.row and c.row.configured) %}required{% endif %}></label>
-    {% endif %}
+    {% for name, label in c.fields %}
+    <label>{{ label }} {% if c.row and c.row.configured %}<small class="muted">(stored; leave empty to keep)</small>{% endif %}
+      <input name="{{ name }}" type="password" autocomplete="new-password" {% if not (c.row and c.row.configured) %}required{% endif %}></label>
+    {% endfor %}
     <label><input type="checkbox" name="enabled" value="true" {% if not c.row or c.row.enabled %}checked{% endif %}> Enabled</label>
     <button>Save</button>
   </form>
@@ -24,7 +24,7 @@
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline">Relink with a new QR</button>
     </form>
     {% endif %}
-    {% if c.traits.token and c.row %}
+    {% if c.fields and c.row %}
     <form method="post" action="/admin/channels/{{ c.kind }}/delete" onsubmit="return confirm('Remove the {{ c.kind }} channel?')">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline">Remove</button>
     </form>

@@ -2,7 +2,7 @@ import json
 
 import db
 
-SECRET_KEYS = {"api_key", "token"}
+SECRET_KEYS = {"api_key", "token", "app_secret", "verify_token"}
 
 
 def redact(detail):

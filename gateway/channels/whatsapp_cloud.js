@@ -1,0 +1,111 @@
+// Meta's official WhatsApp Cloud API. It answers direct messages on a business
+// number: Meta caps Cloud API groups at 8 participants and requires an Official
+// Business Account, so group watching stays with the other channels. Needs a
+// public HTTPS webhook in front of this listener.
+import crypto from "node:crypto";
+import http from "node:http";
+import { blankState } from "../core.js";
+
+// Checked against Meta's docs when this was written; bump it when a version retires.
+const GRAPH = "https://graph.facebook.com/v21.0";
+const PATH = "/webhook/whatsapp_cloud";
+const PORT = Number(process.env.GATEWAY_PORT || 8080);
+
+export function signatureOk(raw, header, appSecret) {
+  const sent = String(header || "").replace(/^sha256=/, "");
+  const mine = crypto.createHmac("sha256", appSecret).update(raw).digest("hex");
+  const a = Buffer.from(sent, "hex");
+  const b = Buffer.from(mine, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export function verification(query, verifyToken) {
+  return query.get("hub.mode") === "subscribe" && query.get("hub.verify_token") === verifyToken
+    ? query.get("hub.challenge")
+    : null;
+}
+
+// The same person is `<number>@s.whatsapp.net` here and on the paired phone, so
+// a Cloud API question finds the groups they are in on the other channel.
+export function payloadFromCloud(msg, contact) {
+  return {
+    wa_msg_id: `wc:${msg.id}`,
+    group_id: null,
+    sender_jid: `${msg.from}@s.whatsapp.net`,
+    sender_name: contact?.profile?.name ?? null,
+    body: msg.text?.body ?? null,
+    quoted_msg_id: msg.context?.id ? `wc:${msg.context.id}` : null,
+    is_bot: false,
+    ts: new Date(Number(msg.timestamp) * 1000).toISOString(),
+  };
+}
+
+export function incoming(body) {
+  const out = [];
+  for (const entry of body?.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const value = change.value ?? {};
+      const contacts = new Map((value.contacts ?? []).map((c) => [c.wa_id, c]));
+      for (const msg of value.messages ?? []) {
+        if (msg.type === "text") out.push(payloadFromCloud(msg, contacts.get(msg.from)));
+      }
+    }
+  }
+  return out;
+}
+
+async function readBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+export async function start(core, config, log) {
+  const state = { ...blankState(), connected: true, jid: config.phone_number_id };
+
+  async function send(to, text) {
+    const res = await fetch(`${GRAPH}/${config.phone_number_id}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${config.token}` },
+      body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: text.slice(0, 4096) } }),
+    });
+    // Outside the 24-hour window Meta rejects a free-form reply; that is theirs to decide.
+    if (!res.ok) log.error({ status: res.status, body: (await res.text()).slice(0, 300) }, "cloud send failed");
+  }
+
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, "http://localhost");
+    if (url.pathname !== PATH) return res.writeHead(404).end();
+    if (req.method === "GET") {
+      const challenge = verification(url.searchParams, config.verify_token);
+      return challenge ? res.writeHead(200).end(challenge) : res.writeHead(403).end();
+    }
+    if (req.method !== "POST") return res.writeHead(405).end();
+    const raw = await readBody(req);
+    if (!signatureOk(raw, req.headers["x-hub-signature-256"], config.app_secret)) {
+      log.warn("cloud webhook signature rejected");
+      return res.writeHead(401).end();
+    }
+    // Meta retries anything that is not answered quickly, so answer first.
+    res.writeHead(200).end();
+    let payloads = [];
+    try {
+      payloads = incoming(JSON.parse(raw.toString()));
+    } catch (err) {
+      return log.error({ err: err.message }, "cloud webhook is not JSON");
+    }
+    for (const payload of payloads) {
+      if (payload.body === null) continue;
+      core
+        .handleDirect(payload, (answer) => send(payload.sender_jid.split("@")[0], answer))
+        .catch((err) => log.error({ err: err.message }, "cloud handle failed"));
+    }
+  });
+
+  await new Promise((resolve, reject) => {
+    server.on("error", reject);
+    server.listen(PORT, resolve);
+  });
+  log.info({ port: PORT, path: PATH }, "cloud webhook listening");
+  return { report: () => core.report("whatsapp_cloud", state), stop: () => server.close() };
+}

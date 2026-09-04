@@ -5,6 +5,7 @@ import { blankState, createCore } from "./core.js";
 import * as discord from "./channels/discord.js";
 import * as telegram from "./channels/telegram.js";
 import * as whatsapp from "./channels/whatsapp.js";
+import * as whatsappCloud from "./channels/whatsapp_cloud.js";
 
 const APP_URL = process.env.APP_URL || "http://app:8000";
 const TOKEN = process.env.GATEWAY_TOKEN;
@@ -14,7 +15,7 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-const MODULES = { whatsapp, telegram, discord };
+const MODULES = { whatsapp, telegram, discord, whatsapp_cloud: whatsappCloud };
 const core = createCore({ appUrl: APP_URL, token: TOKEN, log });
 const running = new Map();
 

@@ -11,7 +11,30 @@ def clean():
     yield
     channels.delete("telegram")
     channels.delete("discord")
+    channels.delete("whatsapp_cloud")
     channels.upsert("whatsapp", None, True)
+
+
+def test_a_multi_field_channel_needs_all_of_them_and_merges_updates(client, clean):
+    import channels
+
+    with pytest.raises(ValueError, match="phone_number_id"):
+        channels.upsert("whatsapp_cloud", {"token": "t"})
+    full = {"token": "t", "phone_number_id": "1", "verify_token": "v", "app_secret": "s"}
+    channels.upsert("whatsapp_cloud", full)
+    # One field retyped, the rest kept.
+    channels.upsert("whatsapp_cloud", {"token": "t2"})
+    assert channels.get("whatsapp_cloud")["config"] == {**full, "token": "t2"}
+    masked = next(c for c in channels.list_all() if c["kind"] == "whatsapp_cloud")["config"]
+    assert masked["token"] == masked["app_secret"] == masked["verify_token"] == "***"
+    assert masked["phone_number_id"] == "1"  # an identifier, not a secret
+
+
+def test_the_channels_page_renders_every_secret_field(browser, clean):
+    page = browser.get("/admin/channels").text
+    assert "Phone number id" in page and "App secret" in page and "24-hour window" in page
+    res = post(browser, "/admin/channels/whatsapp_cloud", token="t", enabled="true")
+    assert res.status_code == 422  # the other three are missing
 
 
 def test_whatsapp_row_exists_after_migration(client):
