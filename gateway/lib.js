@@ -1,5 +1,5 @@
-// Pure functions over Baileys message objects. No socket, no network, so they
-// can be tested without a phone.
+// Pure functions over Baileys message objects and trigger text. No socket, no
+// network, so they can be tested without a phone.
 
 export function textOf(msg) {
   const m = msg.message ?? {};
@@ -32,21 +32,29 @@ export function toPayload(msg, ownJid) {
   };
 }
 
-export function isTrigger(msg, text, ownJids, triggers) {
-  const ctx = contextOf(msg);
-  if ((ctx?.mentionedJid ?? []).some((j) => ownJids.has(bare(j)))) return true;
-  if (ctx?.participant && ownJids.has(bare(ctx.participant))) return true;
+export function hasPrefix(text, triggers) {
   const lower = text.toLowerCase();
   return triggers.some((t) => lower.startsWith(t));
 }
 
-export function questionOf(text, triggers) {
+export function isTrigger(msg, text, ownJids, triggers) {
+  const ctx = contextOf(msg);
+  if ((ctx?.mentionedJid ?? []).some((j) => ownJids.has(bare(j)))) return true;
+  if (ctx?.participant && ownJids.has(bare(ctx.participant))) return true;
+  return hasPrefix(text, triggers);
+}
+
+export function stripPrefix(text, triggers) {
   let q = text;
   for (const t of triggers) {
     if (q.toLowerCase().startsWith(t)) q = q.slice(t.length);
   }
+  return q.trim();
+}
+
+export function questionOf(text, triggers) {
   // A JID mention renders as "@358401234567" in the text body.
-  return q.replace(/@\d+/g, "").trim();
+  return stripPrefix(text, triggers).replace(/@\d+/g, "").trim();
 }
 
 export function quoteStub(groupJid, quote) {

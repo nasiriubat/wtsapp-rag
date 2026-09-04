@@ -5,4 +5,5 @@ COPY package.json package-lock.json ./
 # does not need them, and sharp alone doubles the image size.
 RUN npm ci --legacy-peer-deps --omit=dev
 COPY *.js ./
+COPY channels ./channels
 CMD ["node", "index.js"]
