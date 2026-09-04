@@ -22,7 +22,7 @@ def test_provider_step_adds_tests_and_sets_default(browser, monkeypatch):
     pid = groups.global_settings()["default_provider_id"]
     assert pid is not None and providers.get(pid)["kind"] == "openai"
     page = browser.get(res.headers["location"]).text
-    assert "Test passed" in page and "OK &amp; ready #1" in page and "configured:" in page
+    assert "Test passed" in page and "OK &amp; ready #1" in page and "configured" in page
     providers.delete(pid)
     groups.set_global(default_provider_id=before)
 
@@ -80,6 +80,6 @@ def test_round_trip_status_detects_a_new_question(browser):
             "VALUES ('x@g.us', 'hello', 'got it') RETURNING id"
         ).fetchone()["id"]
     frag = browser.get(f"/setup/test/status?since={since}").text
-    assert "Round trip works" in frag and "got it" in frag
+    assert "round trip works" in frag and "got it" in frag
     with db.connect() as conn:
         conn.execute("DELETE FROM query_log WHERE id = %s", (qid,))

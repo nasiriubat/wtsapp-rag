@@ -9,8 +9,19 @@ import gateway_state
 pages = APIRouter()
 actions = APIRouter()
 
+TITLES = {
+    "whatsapp": "WhatsApp",
+    "telegram": "Telegram",
+    "discord": "Discord",
+    "whatsapp_cloud": "WhatsApp Cloud API",
+}
+SETUP_URL = {
+    "telegram": "https://t.me/BotFather",
+    "discord": "https://discord.com/developers/applications",
+    "whatsapp_cloud": "https://developers.facebook.com/apps",
+}
 HELP = {
-    "whatsapp": "Pairs with a phone; there is no token. Watches the groups it is in.",
+    "whatsapp": "Pairs with a phone by QR code; there is no token. Watches the groups that number is in.",
     "telegram": "Create a bot with @BotFather, then /setprivacy → Disable so it sees every group message. "
     "Add the bot to the group. Groups appear here once someone writes in them.",
     "discord": "Create an application at discord.com/developers, add a Bot, enable the Message Content "
@@ -54,6 +65,8 @@ def page(request: Request, message: str | None = None):
     view = [
         {
             "kind": kind,
+            "title": TITLES.get(kind, kind),
+            "setup_url": SETUP_URL.get(kind),
             "traits": traits,
             "row": rows.get(kind),
             "state": state[kind],

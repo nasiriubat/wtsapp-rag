@@ -17,7 +17,13 @@ from admin import health, pages_channels
 
 pages = APIRouter()
 actions = APIRouter()
-STEPS = ["preflight", "provider", "link", "groups", "test"]
+STEPS = [
+    ("preflight", "System check"),
+    ("provider", "Model"),
+    ("link", "Connect WhatsApp"),
+    ("groups", "Groups"),
+    ("test", "Try it"),
+]
 
 
 def _page(request, step, **ctx):
