@@ -21,6 +21,8 @@ import budget
 import chunking
 import db
 import embed
+import extraction
+import facts
 import gateway_api
 import groups
 import migrate
@@ -55,6 +57,7 @@ async def lifespan(app):
     await asyncio.gather(asyncio.to_thread(embed.warm), asyncio.to_thread(retrieval.warm))
     tasks = [
         asyncio.create_task(loop(chunking.run_once, 60)),
+        asyncio.create_task(loop(extraction.run_once, 90)),
         asyncio.create_task(loop(retention.run_once, 3600)),
     ]
     for t in tasks:
@@ -121,7 +124,7 @@ def ingest(m: Message):
             INSERT INTO messages
               (wa_msg_id, group_id, sender_jid, sender_name, body, quoted_msg_id, is_bot, ts)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (wa_msg_id) DO NOTHING
+            ON CONFLICT (group_id, wa_msg_id) DO NOTHING
             """,
             (m.wa_msg_id, m.group_id, m.sender_jid, m.sender_name, m.body, m.quoted_msg_id, m.is_bot, m.ts),
         )
@@ -140,8 +143,9 @@ class Question(BaseModel):
 def _source(chunk):
     with db.connect() as conn:
         return conn.execute(
-            "SELECT wa_msg_id, sender_jid, sender_name, is_bot, body, ts FROM messages WHERE wa_msg_id = %s",
-            (chunk["first_msg_id"],),
+            "SELECT wa_msg_id, sender_jid, sender_name, is_bot, body, ts FROM messages "
+            "WHERE group_id = %s AND wa_msg_id = %s",
+            (chunk["group_id"], chunk["first_msg_id"]),
         ).fetchone()
 
 
@@ -155,9 +159,12 @@ def _cite(text, src):
     return text, quote
 
 
-def _log_question(q, chunks, timings, text, confidence, tokens, provider, cost, latency_ms, outcome):
+def _log_question(
+    q, chunks, timings, text, confidence, tokens, provider, cost, latency_ms, outcome, fact_ids=()
+):
     retrieved = {
         "chunks": [{"chunk_id": c["id"], "score": c["score"], "source": c["source"]} for c in chunks],
+        "facts": list(fact_ids),
         "timings": timings,
     }
     with db.connect() as conn:
@@ -199,7 +206,7 @@ def ask(q: Question):
     chunks, timings = retrieval.search(q.group_id, q.question)
     confidence = chunks[0]["score"] if chunks else 0.0
     text, quote, tokens, cost, provider = s["refusal_text"], None, (None, None), None, None
-    outcome = "refused"
+    outcome, retrieved_facts = "refused", []
     if confidence >= s["confidence_threshold"]:
         global_settings = groups.global_settings()
         provider = providers.resolve(group, global_settings)
@@ -209,7 +216,11 @@ def ask(q: Question):
             text, outcome = budget.BUDGET_TEXT, "budget"
         else:
             t = time.perf_counter()
-            text, *tokens = answer.generate(q.question, chunks, provider, s)
+            fact_rows = facts.search(q.group_id, q.question) if s["decision_tracking"] else []
+            timings["facts_ms"] = round((time.perf_counter() - t) * 1000)
+            retrieved_facts.extend(r["id"] for r in fact_rows)
+            t = time.perf_counter()
+            text, *tokens = answer.generate(q.question, chunks, provider, s, fact_rows)
             timings["llm_ms"] = round((time.perf_counter() - t) * 1000)
             cost = providers.cost(provider, *tokens)
             if answer.is_refusal(text):
@@ -229,5 +240,17 @@ def ask(q: Question):
             "outcome": outcome,
         },
     )
-    _log_question(q, chunks, timings, text, confidence, tuple(tokens), provider, cost, latency_ms, outcome)
+    _log_question(
+        q,
+        chunks,
+        timings,
+        text,
+        confidence,
+        tuple(tokens),
+        provider,
+        cost,
+        latency_ms,
+        outcome,
+        retrieved_facts,
+    )
     return {"answer": text, "quote": quote}

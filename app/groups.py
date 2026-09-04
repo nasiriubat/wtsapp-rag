@@ -11,7 +11,6 @@ import db
 import retention
 
 REFUSAL = "I don't have anything on that."
-CHANNELS = ("whatsapp", "telegram", "discord")
 
 
 class QuietHours(BaseModel):
@@ -45,6 +44,8 @@ class Settings(BaseModel):
     opt_out: list[str] = []  # sender ids whose messages are erased and never stored again
     quiet_hours: QuietHours | None = None
     monthly_cap_eur: float | None = Field(None, ge=0)  # calendar month, UTC
+    decision_tracking: bool = True  # extract decisions from chunks; one small provider call per chunk
+    allow_dm: bool = True  # members may ask the bot privately about this group
 
 
 class GlobalSettings(BaseModel):

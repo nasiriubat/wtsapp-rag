@@ -11,8 +11,15 @@ pytestmark = needs_db
 NOW = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
 
 
-def fake_chunks(score):
-    chunk = {"id": 1, "content": "Anna: x", "first_msg_id": "src-1", "start_ts": NOW, "end_ts": NOW}
+def fake_chunks(score, gid=None):
+    chunk = {
+        "id": 1,
+        "group_id": gid,
+        "content": "Anna: x",
+        "first_msg_id": "src-1",
+        "start_ts": NOW,
+        "end_ts": NOW,
+    }
     return [{**chunk, "score": score, "source": "vector"}], {"embed_ms": 1}
 
 
@@ -33,7 +40,10 @@ def env(client, monkeypatch):
             "VALUES (%s, %s, %s, %s, %s, %s)",
             ("src-1", gid, "1@s", "Anna", "the source", NOW),
         )
-    monkeypatch.setattr(retrieval, "search", lambda g, q: fake_chunks(0.9))
+    import facts
+
+    monkeypatch.setattr(retrieval, "search", lambda g, q: fake_chunks(0.9, g))
+    monkeypatch.setattr(facts, "search", lambda g, q: [])
     monkeypatch.setattr(providers, "generate", lambda p, s, u: ("An answer.", 100, 10))
     yield {"client": client, "gid": gid, "group": group, "provider": provider}
     with db.connect() as conn:
@@ -96,7 +106,7 @@ def test_refuses_below_threshold_without_calling_provider(env, monkeypatch):
     import providers
     import retrieval
 
-    monkeypatch.setattr(retrieval, "search", lambda g, q: fake_chunks(0.2))
+    monkeypatch.setattr(retrieval, "search", lambda g, q: fake_chunks(0.2, g))
     monkeypatch.setattr(providers, "generate", lambda *a: pytest.fail("provider must not be called"))
     assert ask(env).json() == {"answer": "I don't have anything on that.", "quote": None}
 
