@@ -1,5 +1,6 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
 import fs from "node:fs";
+import path from "node:path";
 import qrcode from "qrcode-terminal";
 import pino from "pino";
 import { bare, isTrigger, questionOf, quoteStub, textOf, toPayload } from "./lib.js";
@@ -8,6 +9,7 @@ import { createQueue } from "./queue.js";
 
 const APP_URL = process.env.APP_URL || "http://app:8000";
 const TOKEN = process.env.GATEWAY_TOKEN;
+const AUTH_DIR = "auth_state";
 const log = pino();
 if (!TOKEN) {
   log.fatal("GATEWAY_TOKEN is not set");
@@ -37,27 +39,37 @@ const retryable = (status) => status === 0 || status >= 500;
 const queue = createQueue("data/queue.jsonl", async (route, body) => !retryable((await post(route, body)).status));
 setInterval(() => queue.flush().catch((err) => log.error({ err: err.message }, "queue flush failed")), 10_000);
 
-// What the app knows about us: connection, the current QR, the groups we can see.
+// The app keeps this in memory only, so it is re-sent on every 30 s tick.
 const state = { connected: false, jid: null, qr: null, groups: [] };
 const report = () => post("/gateway/state", state);
 
+let sock = null;
+let relinking = false;
 let groups = new Map();
+
 async function refreshGroups() {
   try {
     const { groups: fresh, relink } = await loadGroups(APP_URL, TOKEN);
     groups = fresh;
-    if (relink) {
-      // The admin asked for a new QR. Dropping the auth state and exiting lets
-      // compose restart us into a fresh pairing.
-      log.warn("relink requested; clearing auth state and restarting");
-      fs.rmSync("auth_state", { recursive: true, force: true });
-      process.exit(0);
+    if (relink && sock && !relinking) {
+      // Log out server-side; the close handler then clears the auth files and
+      // reconnects, which yields a fresh QR without leaving the process.
+      relinking = true;
+      log.warn("relink requested; logging out");
+      await sock.logout().catch((err) => log.warn({ err: err.message }, "logout failed"));
     }
   } catch (err) {
     log.warn({ err: err.message }, "could not load groups; keeping the previous list");
   }
 }
 setInterval(() => refreshGroups().then(report), 30_000);
+
+// The directory is a bind mount under compose, so only its contents can go.
+function clearAuth() {
+  for (const entry of fs.existsSync(AUTH_DIR) ? fs.readdirSync(AUTH_DIR) : []) {
+    fs.rmSync(path.join(AUTH_DIR, entry), { recursive: true, force: true });
+  }
+}
 
 async function ingest(payload) {
   // While older messages are waiting, go behind them so delivery stays in order.
@@ -72,7 +84,7 @@ async function ingest(payload) {
   }
 }
 
-async function answer(sock, msg, text, ownJid, triggers) {
+async function answer(msg, text, ownJid, triggers) {
   const payload = toPayload(msg, ownJid);
   const { data: reply } = await post("/ask", {
     question: questionOf(text, triggers),
@@ -88,7 +100,7 @@ async function answer(sock, msg, text, ownJid, triggers) {
   await ingest(toPayload(sent, ownJid));
 }
 
-async function listGroups(sock) {
+async function listGroups() {
   try {
     const all = await sock.groupFetchAllParticipating();
     return Object.values(all).map((g) => ({ id: g.id, subject: g.subject }));
@@ -99,8 +111,8 @@ async function listGroups(sock) {
 }
 
 async function connect() {
-  const { state: creds, saveCreds } = await useMultiFileAuthState("auth_state");
-  const sock = makeWASocket({
+  const { state: creds, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  sock = makeWASocket({
     auth: creds,
     // Baileys' info-level output drowns ours; keep only its warnings.
     logger: log.child({ module: "baileys" }, { level: "warn" }),
@@ -115,24 +127,31 @@ async function connect() {
     if (qr) {
       qrcode.generate(qr, { small: true });
       Object.assign(state, { connected: false, qr });
-      report();
     }
     if (connection === "open") {
       log.info({ jid: sock.user?.id, lid: sock.user?.lid }, "connected");
-      Object.assign(state, { connected: true, jid: bare(sock.user?.id), qr: null, groups: await listGroups(sock) });
-      report();
+      Object.assign(state, { connected: true, jid: bare(sock.user?.id), qr: null, groups: await listGroups() });
     }
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
-      Object.assign(state, { connected: false });
-      report();
+      state.connected = false;
       if (code === DisconnectReason.loggedOut) {
-        log.fatal("logged out; delete auth_state/ and scan again, or use the admin's relink");
-        process.exit(1);
+        clearAuth();
+        if (relinking) {
+          relinking = false;
+          log.info("logged out for relink; pairing again");
+          connect();
+        } else {
+          await report();
+          log.fatal("logged out by the phone; restart to pair again");
+          process.exit(1);
+        }
+      } else {
+        log.warn({ code }, "connection closed, reconnecting");
+        connect();
       }
-      log.warn({ code }, "connection closed, reconnecting");
-      connect();
     }
+    await report();
   });
 
   const seen = new Set();
@@ -156,7 +175,7 @@ async function connect() {
       log.info(payload, "message");
       ingest(payload).catch((err) => log.error({ err: err.message }, "ingest failed"));
       if (!msg.key.fromMe && isTrigger(msg, text, ownJids, group.triggers)) {
-        answer(sock, msg, text, ownJid, group.triggers).catch((err) => log.error({ err: err.message }, "answer failed"));
+        answer(msg, text, ownJid, group.triggers).catch((err) => log.error({ err: err.message }, "answer failed"));
       }
     }
   });
