@@ -119,7 +119,7 @@ def insert(group_id, messages):
             cur.executemany(
                 """
                 INSERT INTO messages (wa_msg_id, group_id, sender_jid, sender_name, body, ts)
-                VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (wa_msg_id) DO NOTHING
+                VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (group_id, wa_msg_id) DO NOTHING
                 """,
                 rows,
             )

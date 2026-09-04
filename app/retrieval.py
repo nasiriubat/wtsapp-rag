@@ -37,7 +37,7 @@ RERANK = 10
 TOP = 8
 RRF_K = 60
 
-COLUMNS = "id, content, first_msg_id, start_ts, end_ts"
+COLUMNS = "id, group_id, content, first_msg_id, start_ts, end_ts"
 
 
 def _ms(t):
