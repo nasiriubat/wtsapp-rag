@@ -28,6 +28,8 @@ services:
     volumes:
       # Embedding and reranker models, downloaded once.
       - models:/models
+      # Eval sets, read by scripts/eval.py.
+      - ./evals:/app/evals:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s

@@ -24,13 +24,28 @@ CORRECTION = re.compile(
 DM_CANDIDATES = 5
 
 
-def _source(chunk):
+def _words(text):
+    return {w for w in re.findall(r"\w+", (text or "").lower()) if len(w) > 3}
+
+
+def best_source(messages, text):
+    """The message in an episode the answer most likely came from: the one
+    sharing the most distinctive words with it. The episode's first message is
+    the fallback, and it is what a tie falls back to."""
+    if not messages:
+        return None
+    wanted = _words(text)
+    return max(messages, key=lambda m: len(wanted & _words(m["body"])) if wanted else 0)
+
+
+def _source(chunk, text):
     with db.connect() as conn:
-        return conn.execute(
+        rows = conn.execute(
             "SELECT wa_msg_id, sender_jid, sender_name, is_bot, body, ts FROM messages "
-            "WHERE group_id = %s AND wa_msg_id = %s",
-            (chunk["group_id"], chunk["first_msg_id"]),
-        ).fetchone()
+            "WHERE group_id = %s AND ts BETWEEN %s AND %s AND NOT is_bot ORDER BY ts",
+            (chunk["group_id"], chunk["start_ts"], chunk["end_ts"]),
+        ).fetchall()
+    return best_source(rows, text)
 
 
 def _cite(text, src, group_name=None):
@@ -88,7 +103,7 @@ def answer_in(q, group, cite_group=False, found=None):
     chunks, timings = found or retrieval.search(group["external_id"], q.question)
     confidence = chunks[0]["score"] if chunks else 0.0
     text, quote, tokens, cost, provider = s["refusal_text"], None, (None, None), None, None
-    outcome, fact_ids = "refused", []
+    outcome, fact_ids, source_id = "refused", [], None
     if confidence >= s["confidence_threshold"]:
         global_settings = groups.global_settings()
         provider = providers.resolve(group, global_settings)
@@ -108,7 +123,18 @@ def answer_in(q, group, cite_group=False, found=None):
             if answer.is_refusal(text):
                 text = s["refusal_text"]
             else:
-                text, quote = _cite(text, _source(chunks[0]), group["name"] if cite_group else None)
+                src = _source(chunks[0], text)
+                if src is None:  # the episode was erased between search and answer
+                    return {
+                        "answer": s["refusal_text"],
+                        "quote": None,
+                        "outcome": "refused",
+                        "confidence": confidence,
+                        "timings": timings,
+                        "source_msg_id": None,
+                    }
+                source_id = src["wa_msg_id"]
+                text, quote = _cite(text, src, group["name"] if cite_group else None)
                 outcome = "dm" if cite_group else "answered"
     timings["total_ms"] = round((time.perf_counter() - t0) * 1000)
     observe.count("ask_total", outcome=outcome)
@@ -127,7 +153,14 @@ def answer_in(q, group, cite_group=False, found=None):
         provider=provider,
         cost=cost,
     )
-    return {"answer": text, "quote": quote, "outcome": outcome, "confidence": confidence, "timings": timings}
+    return {
+        "answer": text,
+        "quote": quote,
+        "outcome": outcome,
+        "confidence": confidence,
+        "timings": timings,
+        "source_msg_id": source_id,
+    }
 
 
 def answer_privately(q):
