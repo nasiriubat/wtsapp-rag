@@ -19,6 +19,9 @@ Any LLM provider. Local embeddings and reranker.
   providers, admin panel, eval. Split by feature, not by layer.
 - Postgres 16 + pgvector. Plain SQL via psycopg. Numbered migrations under
   `app/migrations/`, applied by the app at startup. No ORM.
+- Uploaded files are parsed by MarkItDown into the same `chunks` table as the
+  chat, labelled instead of tied to a message. Pictures and scanned pages have
+  no text to parse, so they go to the group's own model.
 - `.env` holds only what must exist before the database does:
   `POSTGRES_PASSWORD`, `SECRET_KEY`, `ADMIN_PASSWORD` (first login). Everything
   the admin owns lives in Postgres.
@@ -45,7 +48,8 @@ Any LLM provider. Local embeddings and reranker.
 
 ## Definition of done for any change
 
-1. Tests for the behavior, green locally and in CI.
+1. Tests for the behavior, green locally and in CI. Run them against a scratch
+   database (`assistant_test`), never the one the panel is using.
 2. `ruff` clean, `node --test` green.
 3. Docs updated if the admin-visible behavior changed.
 4. For a phase: `code-review` and `security-review` run, findings fixed or
@@ -53,11 +57,12 @@ Any LLM provider. Local embeddings and reranker.
 
 ## Not in scope for v1
 
-Say it is out of scope, offer BACKLOG.md, do not build: file upload, Google
-Drive, voice notes, OCR or images, web search, MCP, graph databases,
-Graphiti, Mem0, LiteLLM as a library (the proxy is just an OpenAI-compatible
-URL), document generation, digests (Meta ships them), multi-tenant SaaS,
-Kubernetes, auto wiki, promise tracking.
+Say it is out of scope, offer BACKLOG.md, do not build: Google Drive and other
+cloud sync, voice notes, video, a bundled OCR engine (pictures and scanned
+pages go to the configured vision model instead), web search, MCP, graph
+databases, Graphiti, Mem0, LiteLLM as a library (the proxy is just an
+OpenAI-compatible URL), document generation, digests (Meta ships them),
+multi-tenant SaaS, Kubernetes, auto wiki, promise tracking.
 
 ## Working style
 

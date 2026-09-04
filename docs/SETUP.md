@@ -8,9 +8,11 @@ Contents: [1 Install](#1-install) · [2 Sign in](#2-sign-in) ·
 [4 Connect a channel](#4-connect-a-channel) · [5 Choose groups](#5-choose-groups) ·
 [6 Ask the first question](#6-ask-the-first-question) ·
 [7 Import older history](#7-import-older-history) ·
-[8 Tune a group](#8-tune-a-group) ·
-[9 Change or remove a connection](#9-change-or-remove-a-connection) ·
-[10 Troubleshooting](#10-troubleshooting)
+[8 Add files as knowledge](#8-add-files-as-knowledge) ·
+[9 Tune a group](#9-tune-a-group) ·
+[10 Change or remove a connection](#10-change-or-remove-a-connection) ·
+[11 Erase data](#11-erase-data) ·
+[12 Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -105,9 +107,15 @@ Then:
 2. **Prices** are euros per million tokens, input and output, from that
    provider's pricing page. They start at 0, which makes every answer look
    free and makes budget caps useless, so fill them in.
-3. Press **Test**. It makes one real call and shows the reply or the error.
-4. The first provider you add becomes the default for every group. A group can
-   override it on its own page.
+3. Press **List the models** and pick one from the dropdown. It asks the
+   provider what your key can actually use, so you never have to know a model
+   id by heart. Typing one by hand still works.
+4. Press **Test**. It makes one real call and shows the reply or the error.
+5. The first provider you add becomes the default, marked **default** on the
+   page: that is the one that answers everywhere. Press **Make default** on
+   another to switch. A group can override it under **Answer with** on its own
+   page. If no provider is the default, every question is refused, and the
+   Providers page says so in red.
 
 The eval in [EVAL.md](EVAL.md) found a small model answered a bilingual set as
 accurately as a much larger one, for a twentieth of the cost. Start small.
@@ -236,7 +244,48 @@ because WhatsApp cannot quote a message it never saw.
 
 ---
 
-## 8 Tune a group
+## 8 Add files as knowledge
+
+The assistant answers from the conversation. It can also answer from files you
+give it: a price list, a booking policy, minutes, a photographed rota.
+
+Go to **Knowledge → Upload**.
+
+| It reads | How |
+|---|---|
+| `.txt`, `.md`, `.csv`, `.json`, `.html` | straight through |
+| `.pdf` | page by page, so an answer can cite a page number |
+| `.docx`, `.xlsx`, `.xls`, `.pptx` | converted to text, tables included |
+| `.png`, `.jpg`, and other pictures | read by the model you configured in step 3 |
+| a scanned PDF with no text layer | each page rendered and read by the model, up to 20 pages |
+
+Choose **Every group** or one group. A shared file is searched by every group;
+a group's own file is searched only there. Files up to 25 MB, several at once.
+
+A file is read within seconds of the upload, and the row turns from
+**reading…** to **searchable**. An answer drawn from a file cites the file name
+and page rather than quoting a message, because there is no message to quote.
+
+Two things worth knowing. The model has to see a picture to read it, so each
+image and each scanned page costs one call to your provider; a text PDF costs
+nothing. And the file itself is not kept once its text has been extracted, so
+backups stay small and re-indexing is free.
+
+### Files people share in the chat
+
+Off by default. Turn it on per group under **Groups → the group → Memory →
+Index files shared in the chat**, and documents and pictures posted in that
+group land in Knowledge automatically, up to 10 MB each.
+
+It is off by default for three reasons: the gateway has to download media,
+which is the behaviour most likely to get a WhatsApp number flagged; every
+picture costs a model call; and people who share a photo in a group are not
+necessarily expecting it to be indexed. Members on the group's opt-out list are
+skipped either way.
+
+---
+
+## 9 Tune a group
 
 Each group's page has four sections.
 
@@ -259,7 +308,7 @@ hours during which it stays silent.
 
 ---
 
-## 9 Change or remove a connection
+## 10 Change or remove a connection
 
 **Change the WhatsApp number.** Channels → WhatsApp → **Link a different
 number**. The gateway logs out, clears the old pairing and shows a fresh QR at
@@ -288,13 +337,34 @@ person, or set a retention window so everything ages out.
 
 ---
 
-## 10 Troubleshooting
+## 11 Erase data
+
+Everything the assistant keeps can be deleted from **Data**, and each button
+says exactly what it takes with it.
+
+| To remove | Where | What goes |
+|---|---|---|
+| One member's history | Data → **Erase a member** | Their messages, and the chunks built from episodes they were in. Add them to the group's opt-out list to keep them erased as they keep writing. |
+| A group's whole chat | Data → **Delete chats** on that row | Every message, chunk and recorded decision for the group. Uploaded files survive; they were not said in the chat. |
+| The question log | Data → **Clear the question log** | Questions, answers, what was retrieved, and the **cost history**, which is computed from the same table. Optionally only rows older than N days, or only one group. |
+| One question | Questions → open it → **Delete this question** | That row alone. |
+| A file | Knowledge → **Delete** | The document and everything indexed from it. |
+| Old data, automatically | Groups → the group → **Retention (days)** | Messages and chunks age out on their own. Documents are not aged out. |
+
+Deleting the question log costs you the record of how the assistant is
+performing, which is what the eval and the feedback buttons are built on.
+Clear it when you want the record gone, not as housekeeping.
+
+---
+
+## 12 Troubleshooting
 
 | What you see | What to check |
 |---|---|
 | No reply at all | Channels page: is the channel connected? Then Questions: did the question arrive? If not, the trigger did not fire. Check the group is enabled and the trigger word matches. |
 | "I don't have anything on that" for everything | The group has no history yet. Import the chat export, or wait for the conversation to be chunked, which happens after a 30-minute gap. |
-| "No LLM provider is configured" | Providers page: add one, or the group points at a disabled provider. |
+| "No LLM provider is configured" | Providers page: one of them needs the **default** badge. Press **Make default** on it. A group can also point at a provider you have since disabled. |
+| A file stays on "could not read" | The row says why. A scanned PDF over 20 pages has to be split; an image needs a provider that accepts images. |
 | "The monthly answer budget is used up" | Cost page, or the group's own cap. |
 | The QR never appears | `docker compose logs gateway`. The gateway needs the app to be up first; it retries every five seconds. |
 | Telegram bot sees nothing | `/setprivacy` → Disable in BotFather, then remove and re-add the bot to the group. |

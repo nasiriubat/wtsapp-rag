@@ -23,8 +23,14 @@ quote of the message it came from, or says it does not know.
 - Below a per-group confidence threshold it replies "I don't have anything on
   that." and never calls the LLM.
 - Any LLM: Anthropic, Gemini, or anything OpenAI-compatible (OpenAI,
-  OpenRouter, a LiteLLM proxy, Groq, Mistral, Together, Ollama). Keys are
+  OpenRouter, a LiteLLM proxy, Groq, Mistral, Together, Ollama). Paste a key
+  and pick the model from a list the provider itself returns. Keys are
   encrypted at rest. One global default, overridable per group.
+- Files as knowledge: upload PDF, Word, Excel, PowerPoint, CSV, Markdown, text
+  or pictures on the Knowledge page and they are searched next to the chat,
+  cited by file name and page. Pictures and scanned pages are read by the model
+  you configured, so there is no OCR engine to install. Files shared in a chat
+  can be indexed too, per group, off by default.
 - Channels: WhatsApp (paired phone), Telegram (bot token) and Discord (bot
   token), all through one gateway, mixed freely across groups. Set them up
   on the Channels page; the gateway picks changes up within 30 seconds. The
@@ -38,7 +44,8 @@ quote of the message it came from, or says it does not know.
   though like every question they appear in the admin's question log.
 - Monthly budget caps per group and globally, member opt-out, quiet hours,
   retention. Every question is logged with retrieved chunks, timings, tokens
-  and cost.
+  and cost, and the log, a group's whole history or one member's can be erased
+  from the Data page.
 - Embeddings and the reranker run locally on CPU. No chat text leaves the box
   until the answer step.
 
@@ -136,7 +143,7 @@ Pipeline for one question, with numbers measured on a laptop CPU:
 
 | Step | What | Time |
 |---|---|---|
-| Chunking | Episodes split on a 30-minute gap, max 15 messages or ~400 tokens, `Name: text` lines | background |
+| Chunking | Episodes split on a 30-minute gap, max 15 messages or ~400 tokens, `Name: text` lines. Uploaded files are sliced the same size and labelled | background |
 | Embed | `multilingual-e5-small`, 384 dims, `query:`/`passage:` prefixes | ~20 ms |
 | Search | Vector top-30 + full-text top-30, reciprocal rank fusion (k=60) | ~10 ms |
 | Rerank | `bge-reranker-v2-m3` on the top 10 | ~0.2 s short chunks, ~3.3 s full ones |
@@ -148,6 +155,7 @@ Pipeline for one question, with numbers measured on a laptop CPU:
 pip install -r app/requirements-dev.txt
 ruff check app && ruff format --check app
 pytest                      # unit tests; set DATABASE_URL, SECRET_KEY, ADMIN_PASSWORD, GATEWAY_TOKEN for the integration tests
+                            # point DATABASE_URL at a scratch database, not the one the panel is using
 cd gateway && node --test
 ```
 
