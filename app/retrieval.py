@@ -37,7 +37,9 @@ RERANK = 10
 TOP = 8
 RRF_K = 60
 
-COLUMNS = "id, group_id, content, first_msg_id, start_ts, end_ts"
+COLUMNS = "id, group_id, content, first_msg_id, start_ts, end_ts, document_id, source_label"
+# A chunk with no group is a document shared with every group.
+SCOPE = "(group_id = %s OR group_id IS NULL)"
 
 
 def _ms(t):
@@ -73,7 +75,7 @@ def search(group_id, question):
     t = time.perf_counter()
     with db.connect() as conn:
         vector_rows = conn.execute(
-            f"SELECT {COLUMNS} FROM chunks WHERE group_id = %s ORDER BY embedding <=> %s::vector LIMIT %s",
+            f"SELECT {COLUMNS} FROM chunks WHERE {SCOPE} ORDER BY embedding <=> %s::vector LIMIT %s",
             (group_id, qvec, CANDIDATES),
         ).fetchall()
         tsquery = _or_query(question)
@@ -82,7 +84,7 @@ def search(group_id, question):
             fts_rows = conn.execute(
                 f"""
                 SELECT {COLUMNS} FROM chunks
-                WHERE group_id = %s AND tsv @@ to_tsquery('simple', %s)
+                WHERE {SCOPE} AND tsv @@ to_tsquery('simple', %s)
                 ORDER BY ts_rank_cd(tsv, to_tsquery('simple', %s)) DESC LIMIT %s
                 """,
                 (group_id, tsquery, tsquery, CANDIDATES),

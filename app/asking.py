@@ -122,6 +122,10 @@ def answer_in(q, group, cite_group=False, found=None):
             cost = providers.cost(provider, *tokens)
             if answer.is_refusal(text):
                 text = s["refusal_text"]
+            elif answer.is_document(chunks[0]):
+                # A document has no message to quote, so the file name is the citation.
+                text = f"From {chunks[0]['source_label']}\n\n{text}"
+                outcome = "dm" if cite_group else "answered"
             else:
                 src = _source(chunks[0], text)
                 if src is None:  # the episode was erased between search and answer

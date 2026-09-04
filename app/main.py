@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import binascii
 import logging
 import os
 import pathlib
@@ -7,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import psycopg
-from fastapi import Depends, FastAPI, Response
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -17,6 +19,7 @@ import asking
 import bootstrap
 import chunking
 import db
+import documents
 import embed
 import extraction
 import gateway_api
@@ -52,6 +55,7 @@ async def lifespan(app):
     tasks = [
         asyncio.create_task(loop(chunking.run_once, 60)),
         asyncio.create_task(loop(extraction.run_once, 90)),
+        asyncio.create_task(loop(documents.index_pending, 15)),
         asyncio.create_task(loop(retention.run_once, 3600)),
     ]
     for t in tasks:
@@ -127,6 +131,36 @@ def ingest(m: Message):
         )
     observe.count("ingest_total", outcome="stored")
     return {"ok": True}
+
+
+class SharedFile(BaseModel):
+    group_id: str
+    sender_jid: str
+    filename: str
+    mime: str | None = None
+    data: str  # base64; the gateway caps the size before it gets here
+
+
+@app.post("/ingest/file", dependencies=[Depends(gateway_api.require_token)])
+def ingest_file(f: SharedFile):
+    """A file shared in a group the admin has opted into indexing. Everything
+    else about it is the same as an upload in the panel."""
+    group = groups.get(f.group_id)
+    if group is None or not group["enabled"] or not group["settings"]["index_files"]:
+        return {"ok": True, "stored": False}
+    if f.sender_jid in group["settings"]["opt_out"]:
+        return {"ok": True, "stored": False}
+    try:
+        raw = base64.b64decode(f.data, validate=True)
+    except binascii.Error:
+        raise HTTPException(422, "data is not base64") from None
+    try:
+        documents.create(f.group_id, f.filename, f.mime, raw)
+    except documents.Unreadable as e:
+        log.info("shared file refused", extra={"group": f.group_id, "reason": str(e)})
+        return {"ok": True, "stored": False}
+    log.info("shared file stored", extra={"group": f.group_id, "bytes": len(raw)})
+    return {"ok": True, "stored": True}
 
 
 class Question(BaseModel):

@@ -31,3 +31,12 @@ def browser(client):
 
 def post(browser, path, **data):
     return browser.post(path, data={"csrf": browser.csrf, **data}, follow_redirects=False)
+
+
+@pytest.fixture()
+def stub_embeddings(monkeypatch):
+    """The real model lives in the image, not in a unit test."""
+    import embed
+
+    monkeypatch.setattr(embed, "passages", lambda texts: [[0.1] * 384 for _ in texts])
+    monkeypatch.setattr(embed, "query", lambda text: [0.1] * 384)
