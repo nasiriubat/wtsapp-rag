@@ -1,51 +1,65 @@
 {% extends "base.html" %}
 {% block title %}Data{% endblock %}
+{% block subtitle %}<p class="sub">Import history, rebuild the index, erase a member, export everything.</p>{% endblock %}
 {% block body %}
-<h2>Data</h2>
-{% if message %}<p class="ok">{{ message }}</p>{% endif %}
+{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
 
-<table>
-  <thead><tr><th>Group</th><th class="num">Messages</th><th>First</th><th>Last</th><th></th></tr></thead>
-  <tbody>
-  {% for g in groups %}{% set c = counts.get(g.external_id) %}
-    <tr>
-      <td>{{ g.name or g.external_id }}</td>
-      <td class="num">{{ c.messages if c else 0 }}</td>
-      <td><small>{{ c.first.strftime('%d %b %Y') if c else '–' }}</small></td>
-      <td><small>{{ c.last.strftime('%d %b %Y') if c else '–' }}</small></td>
-      <td>
-        <a href="/admin/data/export/{{ g.id }}.jsonl">export</a> ·
-        <form method="post" action="/admin/data/reembed/{{ g.id }}" style="display:inline" onsubmit="return confirm('Rebuild all chunks for this group?')">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline" style="padding:0 0.5rem">re-embed</button>
-        </form>
-      </td>
-    </tr>
-  {% else %}<tr><td colspan="5" class="muted">No groups.</td></tr>{% endfor %}
-  </tbody>
-</table>
-
-<h3>Backfill from a WhatsApp export</h3>
-<p class="muted">On the phone: ⋮ → More → Export chat → Without media. Upload the .txt here. Re-uploading is safe;
-duplicates are skipped. Answers from imported messages carry a text citation because WhatsApp cannot quote
-messages it never saw.</p>
-<form method="post" action="/admin/data/import" enctype="multipart/form-data">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <div class="grid">
-    <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
-    <label>Export file <input type="file" name="file" accept=".txt" required></label>
+<div class="card">
+  <header><h3>What is stored</h3></header>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Group</th><th class="num">Messages</th><th>From</th><th>To</th><th>Actions</th></tr></thead>
+      <tbody>
+      {% for g in groups %}{% set c = counts.get(g.external_id) %}
+        <tr>
+          <td>{{ g.name or g.external_id }}</td>
+          <td class="num">{{ '{:,}'.format(c.messages) if c else 0 }}</td>
+          <td class="muted">{{ c.first.strftime('%d %b %Y') if c else '–' }}</td>
+          <td class="muted">{{ c.last.strftime('%d %b %Y') if c else '–' }}</td>
+          <td>
+            <div class="actions">
+              <a class="btn secondary" href="/admin/data/export/{{ g.id }}.jsonl">Export</a>
+              <form method="post" action="/admin/data/reembed/{{ g.id }}"
+                    onsubmit="return confirm('Rebuild every chunk for this group? Answers keep working meanwhile.')">
+                <input type="hidden" name="csrf" value="{{ csrf }}"><button class="outline">Re-index</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% else %}<tr><td colspan="5" class="muted">No groups yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
   </div>
-  <button>Import</button>
-</form>
+</div>
 
-<h3>Erase a member</h3>
-<p class="muted">Deletes everything they wrote and rebuilds the chunks that contained it. Add them to the
-group's opt-out list as well if they should stay erased.</p>
-<form method="post" action="/admin/data/purge" onsubmit="return confirm('Erase this member\'s history?')">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <div class="grid">
-    <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
-    <label>Sender id <input name="sender" placeholder="358401234567@s.whatsapp.net" required></label>
-  </div>
-  <button class="secondary">Erase</button>
-</form>
+<div class="card">
+  <header><h3>Import chat history</h3></header>
+  <p class="card-note">The assistant only sees messages sent after it joined. To answer about anything older,
+    export the chat on the phone with <strong>⋮ → More → Export chat → Without media</strong> and upload the
+    <code>.txt</code> here. Re-uploading the same file is safe; duplicates are skipped. Answers drawn from
+    imported messages carry a text citation instead of a quote-reply, because the channel cannot quote a
+    message it never saw.</p>
+  <form method="post" action="/admin/data/import" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid">
+      <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
+      <label>Export file <input type="file" name="file" accept=".txt" required></label>
+    </div>
+    <button>Import</button>
+  </form>
+</div>
+
+<div class="card">
+  <header><h3>Erase a member</h3></header>
+  <p class="card-note">Deletes everything they wrote and rebuilds the chunks that contained it. To keep them
+    erased as they keep writing, add them to the group's opt-out list as well.</p>
+  <form method="post" action="/admin/data/purge" onsubmit="return confirm('Erase this member\'s history? This cannot be undone.')">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid">
+      <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
+      <label>Sender id <input name="sender" placeholder="358401234567@s.whatsapp.net" required></label>
+    </div>
+    <button class="danger">Erase</button>
+  </form>
+</div>
 {% endblock %}

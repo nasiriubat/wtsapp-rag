@@ -1,19 +1,34 @@
 {% extends "setup_base.html" %}
 {% block step %}
 {% if ok is not none %}
-  {% if ok %}<p class="ok">✓ Test passed, the model replied "{{ detail }}".</p>
-  {% else %}<p class="bad">✗ Test failed: {{ detail }}. The provider was saved; fix the key or model on the <a href="/admin/providers">Providers</a> page.</p>{% endif %}
+  {% if ok %}<div class="notice ok">Test passed. The model replied “{{ detail }}”.</div>
+  {% else %}<div class="notice bad">Test failed: {{ detail }}. The provider was saved anyway; fix the key or the
+    model name on the <a href="/admin/providers">Providers page</a>.</div>{% endif %}
 {% endif %}
+
 {% if providers %}
-<p class="ok">✓ {{ providers | length }} provider{{ 's' if providers|length > 1 }} configured:
-  {% for p in providers %}{{ p.name }} ({{ p.model }}){% if not loop.last %}, {% endif %}{% endfor %}.
-  Prices and more on the <a href="/admin/providers">Providers</a> page.</p>
-<a href="/setup/link" role="button">Next: link WhatsApp</a>
-{% else %}
-<p>Paste one API key. The wizard makes one real call to confirm it works.</p>
+<div class="card">
+  <header><h3>Ready</h3><span class="pill ok">{{ providers | length }} configured</span></header>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Kind</th><th>Model</th></tr></thead>
+      <tbody>{% for p in providers %}<tr><td>{{ p.name }}</td><td class="muted">{{ p.kind }}</td><td><code>{{ p.model }}</code></td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</div>
+<div class="actions"><a href="/setup/link" class="btn">Next: connect WhatsApp</a></div>
 {% endif %}
-<details {% if not providers %}open{% endif %}>
-  <summary>Add a provider</summary>
+
+<div class="card">
+  <header><h3>{{ 'Add another provider' if providers else 'Add a provider' }}</h3></header>
+  <p class="card-note">
+    Paste one API key and the wizard makes a real call to prove it works. Where to get a key:
+    <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic</a> ·
+    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> ·
+    <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI</a> ·
+    <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a>.
+    Anything that speaks the OpenAI format works with the <code>openai</code> kind plus a base URL.
+  </p>
   <form method="post" action="/setup/provider">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid">
@@ -21,9 +36,10 @@
       <label>Model <input name="model" placeholder="claude-sonnet-5 · gemini-3.8-flash · gpt-5.4-mini" required></label>
     </div>
     <label>API key <input name="api_key" type="password" autocomplete="new-password" required></label>
-    <label>Base URL <small class="muted">only for OpenAI-compatible servers other than OpenAI (OpenRouter, LiteLLM, Ollama…)</small>
+    <label>Base URL <small>only for OpenAI-compatible services other than OpenAI, such as OpenRouter, a LiteLLM
+      proxy, Groq or Ollama</small>
       <input name="base_url" placeholder="https://openrouter.ai/api/v1"></label>
     <button>Add and test</button>
   </form>
-</details>
+</div>
 {% endblock %}

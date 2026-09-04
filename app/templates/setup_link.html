@@ -1,9 +1,22 @@
 {% extends "setup_base.html" %}
 {% block step %}
-<p>On the phone with the dedicated number: WhatsApp → Linked devices → Link a device, then scan.</p>
-<div hx-get="/setup/link/status" hx-trigger="load, every 3s" hx-swap="innerHTML">Waiting for the gateway…</div>
-<form method="post" action="/setup/link/relink" onsubmit="return confirm('Unlink and show a new QR? The gateway restarts.')" style="margin-top:2rem">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <button class="secondary outline">Relink with a new QR</button>
-</form>
+<div class="card">
+  <header><h3>Link a WhatsApp number</h3></header>
+  <p class="card-note">On the phone: <strong>WhatsApp → Settings → Linked devices → Link a device</strong>,
+    then scan the code below. A dedicated number is safest, because an unofficial client can get a number
+    banned; your own number also works and your own messages will still be answered.</p>
+  <div hx-get="/setup/link/status" hx-trigger="load, every 3s" hx-swap="innerHTML">
+    <p class="muted">Waiting for the gateway…</p>
+  </div>
+</div>
+<div class="card">
+  <header><h3>Other channels</h3></header>
+  <p class="card-note">Telegram, Discord and the WhatsApp Cloud API take a token instead of a QR code. Set them
+    up on the <a href="/admin/channels">Channels page</a>, then come back to pick groups.</p>
+  <form method="post" action="/admin/channels/whatsapp/relink"
+        onsubmit="return confirm('Unlink this number and show a new QR code?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="secondary">Link a different number</button>
+  </form>
+</div>
 {% endblock %}

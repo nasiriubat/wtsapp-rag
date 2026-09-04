@@ -1,20 +1,24 @@
 {% extends "setup_base.html" %}
 {% block step %}
-{% if seen %}
-<p>Groups the linked number belongs to. Tick the ones to log and answer in.</p>
-<form method="post" action="/setup/groups">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  {% for g in seen %}
-  <label>
-    <input type="checkbox" name="group" value="{{ g.id }}" {% if g.id in known %}checked disabled{% endif %}>
-    {{ g.subject or g.id }} <small class="muted">{{ g.id }}{% if g.id in known %} · already enabled{% endif %}</small>
-  </label>
-  {% endfor %}
-  <button>Enable selected</button>
-</form>
-{% else %}
-<p class="bad">No groups reported yet. Link WhatsApp first, or wait a few seconds after linking and reload.</p>
-<a href="/setup/link" role="button" class="secondary">Back to linking</a>
-{% endif %}
-<p><a href="/setup/test" class="muted">Skip</a></p>
+<div class="card">
+  <header><h3>Which conversations should it listen to?</h3></header>
+  {% if seen %}
+  <p class="card-note">These are the groups your connected channels can see. Ticking one starts logging its
+    messages; nothing said before this moment is stored until you import the history.</p>
+  <form method="post" action="/setup/groups">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% for g in seen %}
+    <label><input type="checkbox" name="group" value="{{ g.id }}" {% if g.id in known %}checked disabled{% endif %}>
+      {{ g.subject or g.id }}
+      <small>{{ g.channel }} · {{ g.id }}{% if g.id in known %} · already enabled{% endif %}</small></label>
+    {% endfor %}
+    <button>Enable selected</button>
+  </form>
+  {% else %}
+  <div class="empty"><strong>No conversations reported yet</strong>
+    Link a channel first. On Telegram and Discord a group only appears once somebody writes in it.</div>
+  <div class="actions"><a href="/setup/link" class="btn secondary">Back to linking</a></div>
+  {% endif %}
+</div>
+<div class="actions"><a href="/setup/test" class="btn {{ 'secondary' if seen }}">Skip to the test</a></div>
 {% endblock %}

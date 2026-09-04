@@ -1,55 +1,81 @@
 {% extends "base.html" %}
 {% block title %}Health{% endblock %}
+{% block subtitle %}<p class="sub">What the assistant is doing right now.</p>{% endblock %}
 {% block body %}
-<h2>Health</h2>
 {% if db_error %}
-<p class="bad">Postgres is not answering: {{ db_error }}</p>
+<div class="notice bad"><strong>Postgres is not answering.</strong> {{ db_error }}</div>
 {% else %}
-<div class="grid stats">
-  <article>
-    {% set live = channels.values() | selectattr('connected') | list %}
-    {% set reported = channels.values() | selectattr('reported_at') | list %}
-    {% if live %}<strong class="ok">{{ live | length }} channel{{ 's' if live|length != 1 }} live</strong>
-      {% for k, s in channels.items() if s.connected %}{{ k }}{% if s.jid %} as {{ s.jid }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-    {% elif channels.whatsapp.qr %}<strong class="bad">Not linked</strong><a href="/setup/link">Scan the QR</a>
-    {% elif reported %}<strong class="bad">Disconnected</strong><a href="/admin/channels">see Channels</a>
-    {% else %}<strong class="bad">No gateway</strong>nothing reported yet{% endif %}
-  </article>
-  <article><strong>{{ stats.messages }}</strong>messages, {{ stats.chunks }} chunks, {{ stats.unchunked }} waiting</article>
-  <article><strong>{{ stats.questions_today }}</strong>questions today, {{ stats.refused_today }} refused</article>
-  <article>
-    <strong>{{ '%.0f' % stats.p50 if stats.p50 else '–' }}<small> ms</small></strong>
-    answer p50 over 7 days; p95 {{ '%.0f' % stats.p95 if stats.p95 else '–' }} ms
-  </article>
-  <article>
-    <strong>{{ '%.2f' % stats.spent }}<small> €</small></strong>
-    spent this month{% if cap %} of {{ cap }} € cap{% else %}, no global cap{% endif %}
-  </article>
-  <article><strong>{{ disk_free_gb }}<small> GB</small></strong>free where models live</article>
+{% set live = channels.values() | selectattr('connected') | list %}
+{% set reported = channels.values() | selectattr('reported_at') | list %}
+<div class="stats">
+  <div class="tile">
+    <div class="k">Channels</div>
+    {% if live %}
+      <div class="v">{{ live | length }} <small>live</small></div>
+      <div class="s">{% for k, s in channels.items() if s.connected %}{{ k }}{% if s.jid %} · {{ s.jid }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+    {% elif channels.whatsapp.qr %}
+      <div class="v bad">Not linked</div><div class="s"><a href="/setup/link">Scan the QR →</a></div>
+    {% elif reported %}
+      <div class="v bad">Disconnected</div><div class="s"><a href="/admin/channels">Open Channels →</a></div>
+    {% else %}
+      <div class="v bad">No gateway</div><div class="s">Nothing has reported yet.</div>
+    {% endif %}
+  </div>
+  <div class="tile">
+    <div class="k">Memory</div>
+    <div class="v">{{ '{:,}'.format(stats.messages) }}</div>
+    <div class="s">messages · {{ '{:,}'.format(stats.chunks) }} chunks{% if stats.unchunked %} · {{ stats.unchunked }} waiting{% endif %}</div>
+  </div>
+  <div class="tile">
+    <div class="k">Questions today</div>
+    <div class="v">{{ stats.questions_today }}</div>
+    <div class="s">{{ stats.refused_today }} answered with "I don't know"</div>
+  </div>
+  <div class="tile">
+    <div class="k">Answer time</div>
+    <div class="v">{{ '%.1f' % (stats.p50 / 1000) if stats.p50 else '–' }}<small> s median</small></div>
+    <div class="s">{{ '%.1f' % (stats.p95 / 1000) ~ ' s at the 95th' if stats.p95 else 'no answers yet' }}, last 7 days</div>
+  </div>
+  <div class="tile">
+    <div class="k">Spend this month</div>
+    <div class="v">€{{ '%.2f' % stats.spent }}</div>
+    <div class="s">{% if cap %}of a €{{ cap }} cap · <a href="/admin/cost">Cost</a>{% else %}no global cap · <a href="/admin/cost">set one</a>{% endif %}</div>
+  </div>
+  <div class="tile">
+    <div class="k">Disk</div>
+    <div class="v">{{ disk_free_gb }}<small> GB free</small></div>
+    <div class="s">where the models and queue live</div>
+  </div>
 </div>
 
-<p class="muted">
-  Last message {{ stats.last_message.strftime('%d %b %H:%M') if stats.last_message else 'never' }},
-  last chunk {{ stats.last_chunk.strftime('%d %b %H:%M') if stats.last_chunk else 'never' }}.
+<p class="muted" style="font-size:12.5px">
+  Last message {{ stats.last_message.strftime('%d %b %H:%M') if stats.last_message else 'never' }} ·
+  last chunk built {{ stats.last_chunk.strftime('%d %b %H:%M') if stats.last_chunk else 'never' }}.
+  Messages are grouped into chunks after a 30-minute gap in the conversation.
 </p>
 
-<h3>Groups</h3>
-{% if groups %}
-<table>
-  <thead><tr><th>Name</th><th>Channel</th><th>Triggers</th><th>Enabled</th></tr></thead>
-  <tbody>
-  {% for g in groups %}
-    <tr>
-      <td><a href="/admin/groups/{{ g.id }}">{{ g.name or g.external_id }}</a></td>
-      <td>{{ g.channel }}</td>
-      <td>{{ g.settings.triggers | join(', ') }}</td>
-      <td>{{ 'yes' if g.enabled else 'no' }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p>No groups yet. <a href="/setup">Run the setup</a> or add one under <a href="/admin/groups">Groups</a>.</p>
-{% endif %}
+<div class="card">
+  <header><h3>Groups</h3><a href="/admin/groups" class="btn secondary">Manage groups</a></header>
+  {% if groups %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Channel</th><th>Triggers</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for g in groups %}
+        <tr>
+          <td><a href="/admin/groups/{{ g.id }}">{{ g.name or g.external_id }}</a></td>
+          <td class="muted">{{ g.channel }}</td>
+          <td><code>{{ g.settings.triggers | join('</code> <code>') | safe }}</code></td>
+          <td>{% if g.enabled %}<span class="pill ok">active</span>{% else %}<span class="pill">paused</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><strong>No groups yet</strong>
+    <a href="/setup">Run the setup guide</a> to link a channel and pick the groups to listen to.</div>
+  {% endif %}
+</div>
 {% endif %}
 {% endblock %}

@@ -1,32 +1,45 @@
 {% extends "base.html" %}
 {% block title %}Questions{% endblock %}
+{% block subtitle %}<p class="sub">Every question asked, what it retrieved, and what it cost.</p>{% endblock %}
+{% block topbar_actions %}<a href="/admin/questions.jsonl" class="btn secondary">Export .jsonl</a>{% endblock %}
 {% block body %}
-<h2>Questions</h2>
-<p>
-  {% for key in filters %}<a href="/admin/questions?filter={{ key }}" {% if key == filter %}style="font-weight:bold"{% endif %}>{{ key }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
-  &nbsp; <a href="/admin/questions.jsonl" class="muted">export .jsonl</a>
-</p>
-{% if rows %}
-<table>
-  <thead><tr><th>When</th><th>Group</th><th>Question</th><th>Answer</th><th class="num">Conf.</th><th class="num">ms</th><th class="num">€</th><th>👍👎</th></tr></thead>
-  <tbody>
-  {% for r in rows %}
-    <tr hx-get="/admin/questions/{{ r.id }}" hx-target="#detail-{{ r.id }}" hx-swap="innerHTML" style="cursor:pointer">
-      <td><small>{{ r.ts.strftime('%d %b %H:%M') }}</small></td>
-      <td><small>{{ r.group_name or r.group_id }}</small></td>
-      <td class="wrap">{{ r.question[:120] }}</td>
-      <td class="wrap {{ 'muted' if r.cost is none }}">{{ (r.answer or '')[:120] }}</td>
-      <td class="num">{{ '%.2f' % r.confidence if r.confidence is not none else '' }}</td>
-      <td class="num">{{ r.latency_ms or '' }}</td>
-      <td class="num">{{ '%.4f' % r.cost if r.cost is not none else '' }}</td>
-      <td>{% if r.feedback == 1 %}👍{% elif r.feedback == -1 %}👎{% endif %}</td>
-    </tr>
-    <tr><td colspan="8" id="detail-{{ r.id }}" style="padding:0"></td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-<p><a href="/admin/questions?filter={{ filter }}&before={{ rows[-1].id }}">Older</a></p>
-{% else %}
-<p>No questions logged{% if filter != 'all' %} for this filter{% endif %}.</p>
-{% endif %}
+<div class="card">
+  <header>
+    <div class="actions">
+      {% for key in filters %}
+      <a href="/admin/questions?filter={{ key }}" class="pill {{ 'accent' if key == filter }}">{{ key }}</a>
+      {% endfor %}
+    </div>
+    <span class="muted" style="font-size:12.5px">Click a row for the chunks behind the answer</span>
+  </header>
+  {% if rows %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>When</th><th>Group</th><th>Question</th><th>Answer</th>
+        <th class="num">Conf.</th><th class="num">Time</th><th class="num">Cost</th><th>Rated</th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr hx-get="/admin/questions/{{ r.id }}" hx-target="#d{{ r.id }}" hx-swap="innerHTML" style="cursor:pointer">
+          <td class="muted" style="white-space:nowrap">{{ r.ts.strftime('%d %b %H:%M') }}</td>
+          <td class="muted">{{ r.group_name or r.group_id }}</td>
+          <td class="wrap">{{ r.question[:110] }}</td>
+          <td class="wrap {{ 'muted' if r.cost is none }}">{{ (r.answer or '')[:110] }}</td>
+          <td class="num">{{ '%.2f' % r.confidence if r.confidence is not none else '' }}</td>
+          <td class="num">{{ '%.1fs' % (r.latency_ms / 1000) if r.latency_ms else '' }}</td>
+          <td class="num">{{ '%.4f' % r.cost if r.cost is not none else '' }}</td>
+          <td>{% if r.feedback == 1 %}<span class="pill ok">good</span>{% elif r.feedback == -1 %}<span class="pill bad">wrong</span>{% endif %}</td>
+        </tr>
+        <tr><td colspan="8" id="d{{ r.id }}" style="padding:0"></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><strong>Nothing here yet</strong>
+    {% if filter != 'all' %}No questions match this filter.{% else %}Ask the bot something in a group you enabled.{% endif %}</div>
+  {% endif %}
+</div>
+{% if rows %}<p><a href="/admin/questions?filter={{ filter }}&before={{ rows[-1].id }}" class="btn secondary">Older</a></p>{% endif %}
 {% endblock %}

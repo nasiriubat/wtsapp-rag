@@ -1,35 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Channels{% endblock %}
+{% block subtitle %}<p class="sub">Where the assistant listens. Secrets are encrypted and never shown again.</p>{% endblock %}
 {% block body %}
-<h2>Channels</h2>
-{% if message %}<p class="ok">{{ message }}</p>{% endif %}
-<p class="muted">Every channel forwards through the same gateway. Secrets are encrypted at rest and never shown again.</p>
+{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
 
 {% for c in view %}
-<article>
-  <header><strong>{{ c.kind }}</strong> <span class="{{ c.status[1] }}">· {{ c.status[0] }}</span></header>
-  <p class="muted">{{ help[c.kind] }}{% if c.state.qr_svg %} <a href="/setup/link">A QR is waiting to be scanned.</a>{% endif %}</p>
+<div class="card">
+  <header>
+    <h3>{{ c.title }} <span class="pill {{ c.status[1] }}">{{ c.status[0] }}</span></h3>
+    {% if c.state.groups %}<span class="muted" style="font-size:12.5px">{{ c.state.groups | length }} conversation{{ 's' if c.state.groups | length != 1 }} visible</span>{% endif %}
+  </header>
+  <p class="card-note">{{ help[c.kind] }}
+    {% if c.state.qr_svg %}<a href="/setup/link">A QR code is waiting to be scanned →</a>{% endif %}</p>
   <form method="post" action="/admin/channels/{{ c.kind }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     {% for name, label in c.fields %}
-    <label>{{ label }} {% if c.row and c.row.configured %}<small class="muted">(stored; leave empty to keep)</small>{% endif %}
+    <label>{{ label }} {% if c.row and c.row.configured %}<small>stored; leave empty to keep it</small>{% endif %}
       <input name="{{ name }}" type="password" autocomplete="new-password" {% if not (c.row and c.row.configured) %}required{% endif %}></label>
     {% endfor %}
     <label><input type="checkbox" name="enabled" value="true" {% if not c.row or c.row.enabled %}checked{% endif %}> Enabled</label>
-    <button>Save</button>
+    <div class="actions">
+      <button>Save</button>
+      {% if c.setup_url %}<a class="btn secondary" href="{{ c.setup_url }}" target="_blank" rel="noopener">Open the console ↗</a>{% endif %}
+    </div>
   </form>
-  <div class="grid">
+  <div class="actions" style="margin-top:14px">
     {% if c.traits.pairs and c.row and c.row.enabled %}
-    <form method="post" action="/admin/channels/{{ c.kind }}/relink" onsubmit="return confirm('Unlink and show a new QR?')">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline">Relink with a new QR</button>
-    </form>
+    <form method="post" action="/admin/channels/{{ c.kind }}/relink"
+          onsubmit="return confirm('Unlink this number and show a new QR code?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">Link a different number</button></form>
     {% endif %}
     {% if c.fields and c.row %}
-    <form method="post" action="/admin/channels/{{ c.kind }}/delete" onsubmit="return confirm('Remove the {{ c.kind }} channel?')">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline">Remove</button>
-    </form>
+    <form method="post" action="/admin/channels/{{ c.kind }}/delete"
+          onsubmit="return confirm('Remove the {{ c.title }} channel?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Remove</button></form>
     {% endif %}
   </div>
-</article>
+</div>
 {% endfor %}
 {% endblock %}

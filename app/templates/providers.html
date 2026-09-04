@@ -1,72 +1,80 @@
 {% extends "base.html" %}
 {% block title %}Providers{% endblock %}
+{% block subtitle %}<p class="sub">The models that write the answers. Keys are encrypted and never shown again.</p>{% endblock %}
 {% block body %}
-<h2>Providers</h2>
-{% if message %}<p class="ok">{{ message }}</p>{% endif %}
-<p class="muted">Keys are encrypted at rest and never shown again. Prices are EUR per million tokens; they drive
-the cost figures and budget caps. Options are merged into every request body (a <code>null</code> removes a key).</p>
+{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
 
 {% for p in providers %}
-<details {% if loop.first and providers|length == 1 %}open{% endif %}>
-  <summary>
-    <strong>{{ p.name }}</strong> · {{ p.kind }} · {{ p.model }}
-    {% if p.id == default_id %}<mark>default</mark>{% endif %}
-    {% if not p.enabled %}<span class="bad">disabled</span>{% endif %}
-  </summary>
+<div class="card">
+  <header>
+    <h3>{{ p.name }}
+      {% if p.id == default_id %}<span class="pill accent">default</span>{% endif %}
+      {% if not p.enabled %}<span class="pill bad">disabled</span>{% endif %}
+    </h3>
+    <span class="muted" style="font-size:12.5px">{{ p.kind }} · {{ p.model }}</span>
+  </header>
   <form method="post" action="/admin/providers/{{ p.id }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid">
       <label>Name <input name="name" value="{{ p.name }}" required></label>
       <label>Model <input name="model" value="{{ p.model }}" required></label>
     </div>
-    <label>Base URL <small class="muted">(OpenAI-compatible only)</small>
+    <label>Base URL <small>OpenAI-compatible services only; leave empty for OpenAI itself</small>
       <input name="base_url" value="{{ p.base_url or '' }}" placeholder="https://openrouter.ai/api/v1"></label>
     <div class="grid">
-      <label>Price in €/M <input name="price_in" type="number" step="0.0001" min="0" value="{{ p.price_in }}"></label>
-      <label>Price out €/M <input name="price_out" type="number" step="0.0001" min="0" value="{{ p.price_out }}"></label>
+      <label>Price in (€ per million tokens) <input name="price_in" type="number" step="0.0001" min="0" value="{{ p.price_in }}"></label>
+      <label>Price out (€ per million tokens) <input name="price_out" type="number" step="0.0001" min="0" value="{{ p.price_out }}"></label>
     </div>
-    <label>Options (JSON) <textarea name="options" rows="2">{{ p.options | tojson if p.options else '' }}</textarea></label>
-    <label>New key <small class="muted">(leave empty to keep)</small> <input name="api_key" type="password" autocomplete="new-password"></label>
+    <label>Options (JSON) <small>merged into every request; a null removes a key</small>
+      <textarea name="options" rows="2">{{ p.options | tojson if p.options else '' }}</textarea></label>
+    <label>Replace key <small>leave empty to keep the stored one</small>
+      <input name="api_key" type="password" autocomplete="new-password"></label>
     <label><input type="checkbox" name="enabled" value="true" {% if p.enabled %}checked{% endif %}> Enabled</label>
-    <div class="grid">
+    <div class="actions">
       <button type="submit">Save</button>
-      <button type="button" class="secondary" hx-post="/admin/providers/{{ p.id }}/test" hx-target="#test-{{ p.id }}" hx-swap="innerHTML">Test</button>
-      <span id="test-{{ p.id }}" class="muted" style="align-self:center">Test makes one real call.</span>
+      <button type="button" class="secondary" hx-post="/admin/providers/{{ p.id }}/test"
+              hx-target="#t{{ p.id }}" hx-swap="innerHTML">Test</button>
+      <span id="t{{ p.id }}" class="muted" style="font-size:12.5px">Makes one real call.</span>
     </div>
   </form>
-  <div class="grid">
+  <div class="actions" style="margin-top:14px">
     {% if p.id != default_id %}
-    <form method="post" action="/admin/providers/{{ p.id }}/default"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline">Make default</button></form>
+    <form method="post" action="/admin/providers/{{ p.id }}/default">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">Make default</button></form>
     {% endif %}
-    <form method="post" action="/admin/providers/{{ p.id }}/delete" onsubmit="return confirm('Delete {{ p.name }}?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline">Delete</button></form>
+    <form method="post" action="/admin/providers/{{ p.id }}/delete" onsubmit="return confirm('Delete {{ p.name }}?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Delete</button></form>
   </div>
-</details>
+</div>
 {% else %}
-<p>No providers yet. Add one below; the first one becomes the default.</p>
+<div class="card"><div class="empty"><strong>No providers yet</strong>
+  Add one below. The first you add becomes the default for every group.</div></div>
 {% endfor %}
 
-<h3>Add a provider</h3>
-<form method="post" action="/admin/providers">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <div class="grid">
-    <label>Name <input name="name" placeholder="Claude" required></label>
-    <label>Kind
-      <select name="kind" required>
-        {% for k, help in kinds.items() %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
-      </select>
-    </label>
-  </div>
-  <div class="grid">
+<div class="card">
+  <header><h3>Add a provider</h3></header>
+  <p class="card-note">Where to get a key, and the base URL each service needs, is in
+    <a href="https://github.com/nasiriubat/wtsapp-rag/blob/main/docs/SETUP.md#3-add-a-model-provider">the setup guide</a>.</p>
+  <form method="post" action="/admin/providers">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid">
+      <label>Name <input name="name" placeholder="Claude" required></label>
+      <label>Kind <select name="kind" required>{% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select></label>
+      <label>Model <input name="model" placeholder="claude-sonnet-5" required></label>
+    </div>
     <label>API key <input name="api_key" type="password" autocomplete="new-password" required></label>
-    <label>Model <input name="model" placeholder="claude-sonnet-5" required></label>
-  </div>
-  <label>Base URL <small class="muted">(OpenAI-compatible only)</small> <input name="base_url" placeholder="https://openrouter.ai/api/v1"></label>
-  <div class="grid">
-    <label>Price in €/M <input name="price_in" type="number" step="0.0001" min="0" value="0"></label>
-    <label>Price out €/M <input name="price_out" type="number" step="0.0001" min="0" value="0"></label>
-  </div>
-  <label>Options (JSON) <textarea name="options" rows="2" placeholder='{"max_completion_tokens": 1024}'></textarea></label>
-  <button type="submit">Add provider</button>
-</form>
-<ul class="muted">{% for k, help in kinds.items() %}<li><strong>{{ k }}</strong>: {{ help }}</li>{% endfor %}</ul>
+    <label>Base URL <small>only for OpenAI-compatible services other than OpenAI</small>
+      <input name="base_url" placeholder="https://openrouter.ai/api/v1"></label>
+    <div class="grid">
+      <label>Price in (€/M) <input name="price_in" type="number" step="0.0001" min="0" value="0"></label>
+      <label>Price out (€/M) <input name="price_out" type="number" step="0.0001" min="0" value="0"></label>
+    </div>
+    <label>Options (JSON) <textarea name="options" rows="2" placeholder='{"max_completion_tokens": 1024}'></textarea></label>
+    <button type="submit">Add provider</button>
+  </form>
+  <table style="margin-top:16px">
+    <thead><tr><th>Kind</th><th>Use it for</th></tr></thead>
+    <tbody>{% for k, help in kinds.items() %}<tr><td><code>{{ k }}</code></td><td>{{ help }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
 {% endblock %}

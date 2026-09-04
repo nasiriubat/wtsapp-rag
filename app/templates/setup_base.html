@@ -1,9 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Setup{% endblock %}
+{% block subtitle %}<p class="sub">Five steps from an empty install to the first answer.</p>{% endblock %}
 {% block body %}
-<h2>Setup</h2>
-<nav aria-label="steps"><ul>
-  {% for s in steps %}<li>{% if s == step %}<strong>{{ loop.index }}. {{ s }}</strong>{% else %}<a href="/setup{{ '' if s == 'preflight' else '/' + s }}" class="muted">{{ loop.index }}. {{ s }}</a>{% endif %}</li>{% endfor %}
-</ul></nav>
+{% set current = steps | map(attribute=0) | list %}
+{% set here = current.index(step) %}
+<ol class="steps">
+  {% for slug, label in steps %}
+  <li class="{{ 'now' if loop.index0 == here else ('done' if loop.index0 < here else '') }}">
+    <span class="n">{{ '✓' if loop.index0 < here else loop.index }}</span>
+    {% if loop.index0 == here %}{{ label }}{% else %}<a href="/setup{{ '' if slug == 'preflight' else '/' + slug }}">{{ label }}</a>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
 {% block step %}{% endblock %}
+<p class="muted" style="font-size:12.5px">
+  Stuck on a step? The <a href="https://github.com/nasiriubat/wtsapp-rag/blob/main/docs/SETUP.md">setup guide</a>
+  has the full walkthrough, including where each credential comes from.
+</p>
 {% endblock %}

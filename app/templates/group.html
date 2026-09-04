@@ -1,63 +1,89 @@
 {% extends "base.html" %}
-{% block title %}{{ group.name or group.external_id }}{% endblock %}
-{% block body %}
 {% set s = group.settings %}
-<h2>{{ group.name or group.external_id }} <small class="muted">{{ group.channel }} · <code>{{ group.external_id }}</code></small></h2>
-{% if saved %}<p class="ok">Saved.</p>{% endif %}
+{% block title %}{{ group.name or group.external_id }}{% endblock %}
+{% block subtitle %}<p class="sub">{{ group.channel }} · <code>{{ group.external_id }}</code></p>{% endblock %}
+{% block body %}
+{% if saved %}<div class="notice ok">Saved.</div>{% endif %}
 <form method="post" action="/admin/groups/{{ group.id }}">
   <input type="hidden" name="csrf" value="{{ csrf }}">
-  <div class="grid">
-    <label>Name <input name="name" value="{{ group.name or '' }}"></label>
-    <label>Provider
-      <select name="provider_id">
-        <option value="">Global default{% for p in providers if p.id == default_id %} ({{ p.name }}){% endfor %}</option>
-        {% for p in providers %}<option value="{{ p.id }}" {% if p.id == group.provider_id %}selected{% endif %}>{{ p.name }} · {{ p.model }}{% if not p.enabled %} (disabled){% endif %}</option>{% endfor %}
-      </select>
-    </label>
-  </div>
-  <label><input type="checkbox" name="enabled" value="true" {% if group.enabled %}checked{% endif %}> Enabled (logged and answered)</label>
 
-  <h4>Answering</h4>
-  <label>Triggers <small class="muted">comma-separated prefixes; a mention or a reply to the bot always triggers</small>
-    <input name="triggers" value="{{ s.triggers | join(', ') }}"></label>
-  <label>Confidence threshold <small class="muted">below this the bot refuses without calling the LLM. 0 lets the model decide, which the eval shows is more accurate; raise it only to save provider calls</small>
-    <input name="confidence_threshold" type="range" min="0" max="1" step="0.01" value="{{ s.confidence_threshold }}"
-           oninput="this.nextElementSibling.value = this.value"
-           hx-get="/admin/groups/{{ group.id }}/threshold" hx-trigger="input changed delay:300ms" hx-target="#threshold-stat" hx-include="this" hx-vals='js:{value: event.target.value}'>
-    <output>{{ s.confidence_threshold }}</output>
-  </label>
-  <p id="threshold-stat" class="muted">{{ threshold }}</p>
-  <div class="grid">
-    <label>Refusal text <input name="refusal_text" value="{{ s.refusal_text }}"></label>
-    <label>Answer language <small class="muted">"auto" = language of the question</small> <input name="answer_language" value="{{ s.answer_language }}"></label>
-  </div>
-  <h4>Memory</h4>
-  <label><input type="checkbox" name="decision_tracking" value="true" {% if s.decision_tracking %}checked{% endif %}>
-    Track decisions <small class="muted">one small provider call per chunk; answers can say what changed and when</small></label>
-  <label><input type="checkbox" name="allow_dm" value="true" {% if s.allow_dm %}checked{% endif %}>
-    Members may ask privately <small class="muted">a DM to the bot is answered from this group with a text citation</small></label>
-  <label>Correction acknowledgement <small class="muted">reply when a member answers the bot with "wrong, …"</small>
-    <input name="correction_ack" value="{{ s.correction_ack }}"></label>
-
-  <h4>Limits and privacy</h4>
-  <div class="grid">
-    <label>Monthly cap € <small class="muted">empty = none</small> <input name="monthly_cap_eur" type="number" step="0.01" min="0" value="{{ s.monthly_cap_eur if s.monthly_cap_eur is not none else '' }}"></label>
-    <label>Retention days <small class="muted">empty = keep forever</small> <input name="retention_days" type="number" min="1" value="{{ s.retention_days or '' }}"></label>
-  </div>
-  <label>Opted-out members <small class="muted">one sender id per line; saving erases their history</small>
-    <textarea name="opt_out" rows="3">{{ s.opt_out | join('\n') }}</textarea></label>
-  <fieldset>
-    <legend>Quiet hours <small class="muted">no answers between these times</small></legend>
+  <div class="card">
+    <header><h3>Basics</h3></header>
     <div class="grid">
-      <label>From <input name="quiet_start" type="time" value="{{ s.quiet_hours.start if s.quiet_hours else '' }}"></label>
-      <label>To <input name="quiet_end" type="time" value="{{ s.quiet_hours.end if s.quiet_hours else '' }}"></label>
-      <label>Time zone <input name="quiet_tz" value="{{ s.quiet_hours.tz if s.quiet_hours else 'Europe/Helsinki' }}"></label>
+      <label>Display name <input name="name" value="{{ group.name or '' }}"></label>
+      <label>Answer with
+        <select name="provider_id">
+          <option value="">Global default{% for p in providers if p.id == default_id %} — {{ p.name }}{% endfor %}</option>
+          {% for p in providers %}<option value="{{ p.id }}" {% if p.id == group.provider_id %}selected{% endif %}>{{ p.name }} · {{ p.model }}{% if not p.enabled %} (disabled){% endif %}</option>{% endfor %}
+        </select>
+      </label>
     </div>
-  </fieldset>
-  <button type="submit">Save</button>
+    <label><input type="checkbox" name="enabled" value="true" {% if group.enabled %}checked{% endif %}>
+      Active <small>messages are logged and questions answered</small></label>
+  </div>
+
+  <div class="card">
+    <header><h3>Answering</h3></header>
+    <label>Triggers <small>comma separated. A mention of the bot, or a reply to it, always triggers.</small>
+      <input name="triggers" value="{{ s.triggers | join(', ') }}"></label>
+    <label>Confidence threshold
+      <small>Below this the bot refuses without calling the model. 0 lets the model decide, which the eval
+        found more accurate; raise it only to save provider calls.</small>
+      <input name="confidence_threshold" type="range" min="0" max="1" step="0.01" value="{{ s.confidence_threshold }}"
+             oninput="this.nextElementSibling.value = this.value"
+             hx-get="/admin/groups/{{ group.id }}/threshold" hx-trigger="input changed delay:300ms"
+             hx-target="#threshold-stat" hx-vals='js:{value: event.target.value}'>
+      <output>{{ s.confidence_threshold }}</output>
+    </label>
+    <p id="threshold-stat" class="notice info">{{ threshold }}</p>
+    <div class="grid">
+      <label>Refusal text <input name="refusal_text" value="{{ s.refusal_text }}"></label>
+      <label>Answer language <small>"auto" follows the question</small>
+        <input name="answer_language" value="{{ s.answer_language }}"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h3>Memory</h3></header>
+    <label><input type="checkbox" name="decision_tracking" value="true" {% if s.decision_tracking %}checked{% endif %}>
+      Track decisions <small>one small model call per new chunk, so answers can say what changed and when</small></label>
+    <label><input type="checkbox" name="allow_dm" value="true" {% if s.allow_dm %}checked{% endif %}>
+      Allow private questions <small>members of this group can ask the bot directly and get a text citation</small></label>
+    <label>Correction acknowledgement <small>the reply when someone answers the bot with "wrong, …"</small>
+      <input name="correction_ack" value="{{ s.correction_ack }}"></label>
+  </div>
+
+  <div class="card">
+    <header><h3>Limits and privacy</h3></header>
+    <div class="grid">
+      <label>Monthly cap (€) <small>empty means no cap</small>
+        <input name="monthly_cap_eur" type="number" step="0.01" min="0" value="{{ s.monthly_cap_eur if s.monthly_cap_eur is not none else '' }}"></label>
+      <label>Retention (days) <small>empty keeps everything</small>
+        <input name="retention_days" type="number" min="1" value="{{ s.retention_days or '' }}"></label>
+    </div>
+    <label>Opted-out members <small>one sender id per line. Saving erases everything they have written here.</small>
+      <textarea name="opt_out" rows="3">{{ s.opt_out | join('\n') }}</textarea></label>
+    <fieldset>
+      <legend>Quiet hours</legend>
+      <p class="card-note">No answers between these times. Leave empty to answer around the clock.</p>
+      <div class="grid">
+        <label>From <input name="quiet_start" type="time" value="{{ s.quiet_hours.start if s.quiet_hours else '' }}"></label>
+        <label>To <input name="quiet_end" type="time" value="{{ s.quiet_hours.end if s.quiet_hours else '' }}"></label>
+        <label>Time zone <input name="quiet_tz" value="{{ s.quiet_hours.tz if s.quiet_hours else 'Europe/Helsinki' }}"></label>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="actions"><button type="submit">Save changes</button></div>
 </form>
-<form method="post" action="/admin/groups/{{ group.id }}/delete" onsubmit="return confirm('Delete this group? Messages stay in the database until retention removes them.')">
-  <input type="hidden" name="csrf" value="{{ csrf }}">
-  <button class="secondary outline">Delete group</button>
-</form>
+
+<div class="card">
+  <header><h3>Danger zone</h3></header>
+  <p class="card-note">Removing the group stops logging and answering. Messages already stored stay until
+    retention removes them or you erase them from the Data page.</p>
+  <form method="post" action="/admin/groups/{{ group.id }}/delete" onsubmit="return confirm('Remove this group?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="danger">Remove group</button>
+  </form>
+</div>
 {% endblock %}

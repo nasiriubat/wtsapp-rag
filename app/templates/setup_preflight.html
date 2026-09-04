@@ -1,16 +1,26 @@
 {% extends "setup_base.html" %}
 {% block step %}
-<p>Under ten minutes from here to the first answer. Each failing check names its fix.</p>
-<table>
-  <tbody>
-  {% for state, name, detail in checks %}
-    <tr>
-      <td>{% if state == 'ok' %}<span class="ok">✓</span>{% elif state == 'warn' %}<span style="color:orange">⚠</span>{% else %}<span class="bad">✗</span>{% endif %}</td>
-      <td><strong>{{ name }}</strong></td>
-      <td>{{ detail }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-<a href="/setup/provider" role="button">Next: LLM provider</a>
+<div class="card">
+  <header><h3>System check</h3></header>
+  <p class="card-note">Everything below has to be green or amber before the assistant can answer. Each line
+    names its own fix.</p>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+      {% for state, name, detail in checks %}
+        <tr>
+          <td style="width:1%">
+            {% if state == 'ok' %}<span class="pill ok">ok</span>
+            {% elif state == 'warn' %}<span class="pill warn">check</span>
+            {% else %}<span class="pill bad">failed</span>{% endif %}
+          </td>
+          <td><strong>{{ name }}</strong></td>
+          <td class="muted">{{ detail }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="actions"><a href="/setup/provider" class="btn">Next: choose a model</a></div>
 {% endblock %}

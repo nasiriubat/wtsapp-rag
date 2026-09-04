@@ -1,14 +1,16 @@
 {% if gateway.connected %}
-<p class="ok">✓ Linked as {{ gateway.jid }}. The number is in {{ gateway.groups | length }} group{{ 's' if gateway.groups|length != 1 }}.</p>
-<a href="/setup/groups" role="button">Next: pick groups</a>
+<div class="notice ok">Linked as {{ gateway.jid }}. This number is in
+  {{ gateway.groups | length }} group{{ 's' if gateway.groups | length != 1 }}.</div>
+<div class="actions" style="margin-top:12px"><a href="/setup/groups" class="btn">Next: pick groups</a></div>
 {% elif gateway.qr_svg %}
-<div style="max-width: 20rem">{{ gateway.qr_svg | safe }}</div>
-<p class="muted">The code refreshes on its own. Keep this page open while you scan.</p>
+<div class="qr">{{ gateway.qr_svg | safe }}</div>
+<p class="muted" style="margin-top:10px">The code refreshes on its own. Keep this page open while you scan.</p>
 {% elif gateway.relink %}
-<p>Asking the gateway for a fresh QR…</p>
+<p class="muted">Asking the gateway for a fresh code…</p>
 {% elif gateway.reported_at %}
-<p class="bad">Gateway is reporting but has neither a QR nor a link. It is probably reconnecting; if this stays, check
-<code>docker compose logs gateway</code>.</p>
+<div class="notice bad">The gateway is running but has neither a code nor a link. It is probably reconnecting.
+  If this stays, check <code>docker compose logs gateway</code>.</div>
 {% else %}
-<p class="bad">The gateway has not reported. Is it running? <code>docker compose ps</code> and <code>docker compose logs gateway</code>.</p>
+<div class="notice bad">The gateway has not reported yet. Check that it is running:
+  <code>docker compose ps</code> and <code>docker compose logs gateway</code>.</div>
 {% endif %}

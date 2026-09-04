@@ -1,37 +1,70 @@
+{% set icons = {
+  "health": "M3 12h4l3 8 4-16 3 8h4",
+  "questions": "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+  "groups": "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0M23 21v-2a4 4 0 0 0-3-3.87",
+  "providers": "M4 4h16v16H4zM9 9h6v6H9zM9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3",
+  "channels": "M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16M6 20a1 1 0 1 1-2 0 1 1 0 0 1 2 0",
+  "cost": "M1 4h22v16H1zM1 10h22",
+  "data": "M20 5c0 1.7-3.6 3-8 3S4 6.7 4 5s3.6-3 8-3 8 1.3 8 3zM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5",
+  "setup": "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"
+} %}
+{% set sections = [
+  ("Overview", [("/admin", "Health", "health"), ("/admin/questions", "Questions", "questions")]),
+  ("Configuration", [("/admin/groups", "Groups", "groups"), ("/admin/providers", "Providers", "providers"),
+                     ("/admin/channels", "Channels", "channels")]),
+  ("Running it", [("/admin/cost", "Cost", "cost"), ("/admin/data", "Data", "data"),
+                  ("/setup", "Setup guide", "setup")])
+] %}
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Admin{% endblock %} · Group assistant</title>
-  <link rel="stylesheet" href="/static/pico.min.css">
+  <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js"></script>
-  <style>
-    nav.top { padding: 0 1rem; }
-    nav.top ul li a.active { font-weight: bold; text-decoration: underline; }
-    .ok { color: var(--pico-ins-color); } .bad { color: var(--pico-del-color); }
-    .muted { color: var(--pico-muted-color); }
-    .num { text-align: right; font-variant-numeric: tabular-nums; }
-    table { font-size: 0.9rem; }
-    td.wrap { white-space: pre-wrap; max-width: 30rem; }
-    .grid.stats article { margin: 0; padding: 0.75rem 1rem; }
-    .grid.stats article strong { font-size: 1.5rem; display: block; }
-  </style>
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
-<nav class="top">
-  <ul><li><strong>Group assistant</strong></li></ul>
-  <ul>
-    {% for href, label in [("/admin", "Health"), ("/admin/questions", "Questions"), ("/admin/groups", "Groups"),
-                           ("/admin/providers", "Providers"), ("/admin/channels", "Channels"),
-                           ("/admin/cost", "Cost"), ("/admin/data", "Data"), ("/setup", "Setup")] %}
-    <li><a href="{{ href }}" class="{{ 'active' if request.url.path == href or (href != '/admin' and request.url.path.startswith(href)) else '' }}">{{ label }}</a></li>
-    {% endfor %}
-    <li><form method="post" action="/admin/logout" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary outline" style="padding:0.25rem 0.75rem">Log out</button></form></li>
-  </ul>
-</nav>
-<main class="container">
-  {% block body %}{% endblock %}
-</main>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="mark">GA</span>
+      <span><strong>Group assistant</strong><small>v1.0</small></span>
+    </div>
+    <nav class="nav">
+      {% for label, items in sections %}
+      <span class="label">{{ label }}</span>
+      {% for href, name, icon in items %}
+      {% set active = request.url.path == href or (href not in ("/admin", "/setup") and request.url.path.startswith(href)) or (href == "/setup" and request.url.path.startswith("/setup")) %}
+      <a href="{{ href }}" class="{{ 'active' if active }}">
+        <svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ icons[icon] }}"/></svg>
+        {{ name }}
+      </a>
+      {% endfor %}
+      {% endfor %}
+    </nav>
+    <div class="sidebar-foot">
+      <div class="who">Signed in as <strong>admin</strong></div>
+      <form method="post" action="/admin/logout">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="secondary" style="width:100%">Log out</button>
+      </form>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <h2>{% block heading %}{{ self.title() }}{% endblock %}</h2>
+        {% block subtitle %}{% endblock %}
+      </div>
+      {% block topbar_actions %}{% endblock %}
+    </header>
+    <main class="content">
+      {% block body %}{% endblock %}
+    </main>
+  </div>
+</div>
 </body>
 </html>

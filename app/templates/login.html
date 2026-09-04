@@ -1,22 +1,30 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Log in · Group assistant</title>
-  <link rel="stylesheet" href="/static/pico.min.css">
+  <title>Sign in · Group assistant</title>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<main class="container" style="max-width: 24rem; margin-top: 4rem">
-  <h1>Group assistant</h1>
-  <form method="post" action="/admin/login">
-    <label>Admin password
-      <input type="password" name="password" autofocus required autocomplete="current-password">
-    </label>
-    {% if error %}<p class="bad" style="color: var(--pico-del-color)">{{ error }}</p>{% endif %}
-    <button type="submit">Log in</button>
-  </form>
-  <p style="color: var(--pico-muted-color)">The password is <code>ADMIN_PASSWORD</code> in <code>.env</code>.</p>
+<main class="signin">
+  <div class="card">
+    <div class="brand">
+      <span class="mark">GA</span>
+      <span><strong>Group assistant</strong><small>Admin</small></span>
+    </div>
+    <form method="post" action="/admin/login">
+      <label>Admin password
+        <input type="password" name="password" autofocus required autocomplete="current-password">
+      </label>
+      {% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
+      <button type="submit" style="width:100%">Sign in</button>
+    </form>
+    <p class="muted" style="font-size:12.5px; margin:14px 0 0">
+      The password is <code>ADMIN_PASSWORD</code> in your <code>.env</code>. Five wrong attempts pause
+      sign-in for a minute.
+    </p>
+  </div>
 </main>
 </body>
 </html>

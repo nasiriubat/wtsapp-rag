@@ -1,10 +1,13 @@
 {% if row %}
-<article>
-  <p class="ok">✓ Round trip works.</p>
-  <p><strong>{{ row.name or 'Group' }} asked:</strong> {{ row.question }}</p>
-  <p><strong>Answered:</strong> {{ row.answer }}</p>
-</article>
-<a href="/admin" role="button">Done: open the admin</a>
+<div class="notice ok">The round trip works.</div>
+<div class="card" style="margin-top:12px">
+  <p><strong>{{ row.name or 'The group' }} asked</strong><br>{{ row.question }}</p>
+  <p><strong>It answered</strong><br>{{ row.answer }}</p>
+</div>
+<div class="actions" style="margin-top:12px">
+  <a href="/admin" class="btn">Open the dashboard</a>
+  <a href="/admin/data" class="btn secondary">Import older history</a>
+</div>
 {% else %}
 <p class="muted">Waiting for the first question…</p>
 {% endif %}
