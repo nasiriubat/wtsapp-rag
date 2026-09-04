@@ -97,6 +97,9 @@ def save(
     quiet_end: str = Form(""),
     quiet_tz: str = Form("UTC"),
     monthly_cap_eur: str = Form(""),
+    decision_tracking: bool = Form(False),
+    allow_dm: bool = Form(False),
+    correction_ack: str = Form(""),
 ):
     # Empty fields fall back to the Settings defaults through validation.
     raw = {
@@ -104,7 +107,11 @@ def save(
         "retention_days": _number(retention_days, int, "retention days"),
         "opt_out": _lines(opt_out),
         "monthly_cap_eur": _number(monthly_cap_eur, float, "monthly cap"),
+        "decision_tracking": decision_tracking,
+        "allow_dm": allow_dm,
     }
+    if correction_ack.strip():
+        raw["correction_ack"] = correction_ack.strip()
     if triggers.strip():
         raw["triggers"] = _lines(triggers)
     if refusal_text.strip():

@@ -40,6 +40,7 @@ def config():
 class SeenGroup(BaseModel):
     id: str
     subject: str | None = None
+    members: list[str] = []  # sender ids, where the channel can list them
 
 
 class State(BaseModel):

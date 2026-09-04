@@ -1,9 +1,7 @@
 import asyncio
-import json
 import logging
 import os
 import pathlib
-import time
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -15,23 +13,19 @@ from pydantic import BaseModel
 
 import admin
 import admin_api
-import answer
+import asking
 import bootstrap
-import budget
 import chunking
 import db
 import embed
 import extraction
-import facts
 import gateway_api
 import groups
 import migrate
 import observe
-import providers
 import retention
 import retrieval
 
-NO_PROVIDER = "No LLM provider is configured yet. Ask the admin to add one."
 log = logging.getLogger("app")
 
 
@@ -134,66 +128,18 @@ def ingest(m: Message):
 
 class Question(BaseModel):
     question: str
-    group_id: str
+    group_id: str | None = None  # None: a private question, answered from the sender's groups
     sender_jid: str
     sender_name: str | None = None
     wa_msg_id: str
-
-
-def _source(chunk):
-    with db.connect() as conn:
-        return conn.execute(
-            "SELECT wa_msg_id, sender_jid, sender_name, is_bot, body, ts FROM messages "
-            "WHERE group_id = %s AND wa_msg_id = %s",
-            (chunk["group_id"], chunk["first_msg_id"]),
-        ).fetchone()
-
-
-def _cite(text, src):
-    # Imported messages have synthetic ids, so WhatsApp cannot resolve a quote to
-    # them. A text citation is the fallback.
-    if src["wa_msg_id"].startswith("import:"):
-        first_line = (src["body"] or "").splitlines()[0]
-        return f'From {src["ts"]:%d %b %Y}, {src["sender_name"]}: "{first_line}"\n\n{text}', None
-    quote = {k: src[k] for k in ("wa_msg_id", "sender_jid", "is_bot", "body")}
-    return text, quote
-
-
-def _log_question(
-    q, chunks, timings, text, confidence, tokens, provider, cost, latency_ms, outcome, fact_ids=()
-):
-    retrieved = {
-        "chunks": [{"chunk_id": c["id"], "score": c["score"], "source": c["source"]} for c in chunks],
-        "facts": list(fact_ids),
-        "timings": timings,
-    }
-    with db.connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO query_log
-              (group_id, sender_jid, question, retrieved, answer, confidence,
-               tokens_in, tokens_out, latency_ms, provider_id, cost, outcome)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                q.group_id,
-                q.sender_jid,
-                q.question,
-                json.dumps(retrieved),
-                text,
-                confidence,
-                tokens[0],
-                tokens[1],
-                latency_ms,
-                provider["id"] if provider else None,
-                cost,
-                outcome,
-            ),
-        )
+    quoted_msg_id: str | None = None
 
 
 @app.post("/ask", dependencies=[Depends(gateway_api.require_token)])
 def ask(q: Question):
+    if q.group_id is None:
+        res = asking.answer_privately(q)
+        return {"answer": res["answer"], "quote": None}
     group = groups.get(q.group_id)
     if group is None or not group["enabled"]:
         return {"answer": None, "quote": None}
@@ -201,56 +147,16 @@ def ask(q: Question):
     if q.sender_jid in s["opt_out"] or groups.in_quiet_hours(s):
         observe.count("ask_total", outcome="suppressed")
         return {"answer": None, "quote": None}
-
-    t0 = time.perf_counter()
-    chunks, timings = retrieval.search(q.group_id, q.question)
-    confidence = chunks[0]["score"] if chunks else 0.0
-    text, quote, tokens, cost, provider = s["refusal_text"], None, (None, None), None, None
-    outcome, retrieved_facts = "refused", []
-    if confidence >= s["confidence_threshold"]:
-        global_settings = groups.global_settings()
-        provider = providers.resolve(group, global_settings)
-        if provider is None:
-            text, outcome = NO_PROVIDER, "no_provider"
-        elif budget.exceeded(group, global_settings):
-            text, outcome = budget.BUDGET_TEXT, "budget"
-        else:
-            t = time.perf_counter()
-            fact_rows = facts.search(q.group_id, q.question) if s["decision_tracking"] else []
-            timings["facts_ms"] = round((time.perf_counter() - t) * 1000)
-            retrieved_facts.extend(r["id"] for r in fact_rows)
-            t = time.perf_counter()
-            text, *tokens = answer.generate(q.question, chunks, provider, s, fact_rows)
-            timings["llm_ms"] = round((time.perf_counter() - t) * 1000)
-            cost = providers.cost(provider, *tokens)
-            if answer.is_refusal(text):
-                text = s["refusal_text"]
-            else:
-                text, quote = _cite(text, _source(chunks[0]))
-                outcome = "answered"
-    latency_ms = round((time.perf_counter() - t0) * 1000)
-    observe.count("ask_total", outcome=outcome)
-    observe.observe_latency(latency_ms / 1000)
+    corrected = asking.try_correction(q, group)
+    if corrected:
+        return corrected
+    res = asking.answer_in(q, group)
     log.info(
         "ask",
         extra={
             "group": q.group_id,
-            "confidence": round(confidence, 3),
-            "latency_ms": latency_ms,
-            "outcome": outcome,
+            "confidence": round(res["confidence"], 3),
+            "refused": res["quote"] is None,
         },
     )
-    _log_question(
-        q,
-        chunks,
-        timings,
-        text,
-        confidence,
-        tuple(tokens),
-        provider,
-        cost,
-        latency_ms,
-        outcome,
-        retrieved_facts,
-    )
-    return {"answer": text, "quote": quote}
+    return {"answer": res["answer"], "quote": res["quote"]}

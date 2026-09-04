@@ -31,6 +31,13 @@
     <label>Refusal text <input name="refusal_text" value="{{ s.refusal_text }}"></label>
     <label>Answer language <small class="muted">"auto" = language of the question</small> <input name="answer_language" value="{{ s.answer_language }}"></label>
   </div>
+  <h4>Memory</h4>
+  <label><input type="checkbox" name="decision_tracking" value="true" {% if s.decision_tracking %}checked{% endif %}>
+    Track decisions <small class="muted">one small provider call per chunk; answers can say what changed and when</small></label>
+  <label><input type="checkbox" name="allow_dm" value="true" {% if s.allow_dm %}checked{% endif %}>
+    Members may ask privately <small class="muted">a DM to the bot is answered from this group with a text citation</small></label>
+  <label>Correction acknowledgement <small class="muted">reply when a member answers the bot with "wrong, …"</small>
+    <input name="correction_ack" value="{{ s.correction_ack }}"></label>
 
   <h4>Limits and privacy</h4>
   <div class="grid">

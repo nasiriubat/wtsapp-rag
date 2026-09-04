@@ -1,4 +1,4 @@
-import { ChannelType, Client, GatewayIntentBits } from "discord.js";
+import { ChannelType, Client, GatewayIntentBits, Partials } from "discord.js";
 import { blankState } from "../core.js";
 import { hasPrefix, stripPrefix } from "../lib.js";
 
@@ -34,7 +34,14 @@ export function discordQuestion(content, botId, triggers) {
 
 export async function start(core, config, log) {
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.DirectMessages,
+    ],
+    // DM channels are not cached until a message arrives.
+    partials: [Partials.Channel],
     // An answer quoting "@everyone" from the chat must not ping anyone.
     allowedMentions: { parse: [] },
   });
@@ -60,7 +67,18 @@ export async function start(core, config, log) {
   });
   client.on("messageCreate", (m) => {
     // Other bots are noise; our own sends are ingested on the way out.
-    if (!m.guildId || m.author.bot) return;
+    if (m.author.bot) return;
+    if (!m.guildId) {
+      if (!m.content) return;
+      const p = payloadFromDiscord(m, client.user.id);
+      core
+        .handleDirect(
+          { sender_jid: p.sender_jid, sender_name: p.sender_name, wa_msg_id: p.wa_msg_id, question: m.content },
+          (answer) => m.channel.send({ content: answer.slice(0, LIMIT) }),
+        )
+        .catch((err) => log.error({ err: err.message }, "discord direct failed"));
+      return;
+    }
     const group = core.groupFor(groupId(m.channelId));
     if (!group) return;
     const payload = payloadFromDiscord(m, client.user.id);

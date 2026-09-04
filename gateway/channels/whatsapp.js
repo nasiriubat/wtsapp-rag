@@ -24,7 +24,13 @@ export async function start(core, config, log) {
   async function listGroups() {
     try {
       const all = await sock.groupFetchAllParticipating();
-      return Object.values(all).map((g) => ({ id: g.id, subject: g.subject }));
+      // Members under every id form Baileys knows, so a DM sender matches.
+      const ids = (p) => [p.id, p.jid, p.phoneNumber, p.lid].filter(Boolean).map(bare);
+      return Object.values(all).map((g) => ({
+        id: g.id,
+        subject: g.subject,
+        members: [...new Set((g.participants ?? []).flatMap(ids))],
+      }));
     } catch (err) {
       log.warn({ err: err.message }, "could not list groups");
       return [];
@@ -78,6 +84,22 @@ export async function start(core, config, log) {
       const ownJids = new Set([ownJid, bare(sock.user?.lid)].filter(Boolean));
       for (const msg of messages) {
         const jid = msg.key.remoteJid ?? "";
+        if (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid")) {
+          const text = textOf(msg);
+          if (msg.key.fromMe || text === null) continue;
+          core
+            .handleDirect(
+              {
+                sender_jid: bare(msg.key.remoteJidAlt ?? jid),
+                sender_name: msg.pushName ?? null,
+                wa_msg_id: msg.key.id,
+                question: text,
+              },
+              (answer) => sock.sendMessage(jid, { text: answer }, { quoted: msg }),
+            )
+            .catch((err) => log.error({ err: err.message }, "whatsapp direct failed"));
+          continue;
+        }
         if (!jid.endsWith("@g.us")) continue;
         const group = core.groupFor(jid);
         if (!group) {

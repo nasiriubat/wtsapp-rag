@@ -46,6 +46,7 @@ class Settings(BaseModel):
     monthly_cap_eur: float | None = Field(None, ge=0)  # calendar month, UTC
     decision_tracking: bool = True  # extract decisions from chunks; one small provider call per chunk
     allow_dm: bool = True  # members may ask the bot privately about this group
+    correction_ack: str = "Noted, I'll go with that from now on."
 
 
 class GlobalSettings(BaseModel):
@@ -123,6 +124,26 @@ def apply(group_id, **fields):
 def delete(group_id):
     with db.connect() as conn:
         conn.execute("DELETE FROM groups WHERE id = %s", (group_id,))
+
+
+def dm_candidates(sender_jid, reported_members):
+    """Groups a private question may be answered from: enabled, DMs allowed,
+    and the sender is a member, either as the channel reports it or because
+    they have written there. `reported_members` maps external id to ids."""
+    with db.connect() as conn:
+        wrote = {
+            r["group_id"]
+            for r in conn.execute(
+                "SELECT DISTINCT group_id FROM messages WHERE sender_jid = %s", (sender_jid,)
+            )
+        }
+    return [
+        g
+        for g in list_all()
+        if g["enabled"]
+        and g["settings"]["allow_dm"]
+        and (g["external_id"] in wrote or sender_jid in reported_members.get(g["external_id"], ()))
+    ]
 
 
 def global_settings():

@@ -59,3 +59,8 @@ def any_reported():
 def seen_groups():
     """Every group any channel can see, tagged with its channel, for the pickers."""
     return [{**g, "channel": kind} for kind, s in _state.items() for g in s["groups"]]
+
+
+def members():
+    """external id -> set of member ids, for channels that can list them."""
+    return {g["id"]: set(g.get("members") or []) for s in _state.values() for g in s["groups"]}
