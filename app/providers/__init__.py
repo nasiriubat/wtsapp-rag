@@ -1,6 +1,7 @@
 """LLM providers: stored encrypted in Postgres, one function shape for all kinds."""
 
 import json
+import time
 from decimal import Decimal
 
 import db
@@ -12,13 +13,29 @@ KINDS = {"anthropic": anthropic, "gemini": gemini, "openai": openai_compat}
 _COLUMNS = "id, name, kind, base_url, model, price_in, price_out, options, enabled, created_at"
 
 
+# Decrypting a key is one query per question and per extracted chunk; the row
+# changes when the admin edits it, which drops the memo.
+_memo = {}
+MEMO_SECONDS = 30
+
+
+def forget():
+    _memo.clear()
+
+
 def get(provider_id):
     """Full row including the decrypted key. Never return this to a browser."""
+    now = time.monotonic()
+    hit = _memo.get(provider_id)
+    if hit and now - hit[0] < MEMO_SECONDS:
+        return dict(hit[1]) if hit[1] is not None else None
     with db.connect() as conn:
-        return conn.execute(
+        row = conn.execute(
             f"SELECT {_COLUMNS}, pgp_sym_decrypt(api_key, %s) AS api_key FROM providers WHERE id = %s",
             (db.secret_key(), provider_id),
         ).fetchone()
+    _memo[provider_id] = (now, row)
+    return dict(row) if row is not None else None
 
 
 def list_all():
@@ -30,6 +47,7 @@ def list_all():
 def create(name, kind, api_key, model, base_url=None, price_in=0, price_out=0, options=None, enabled=True):
     if kind not in KINDS:
         raise ValueError(f"unknown provider kind {kind!r}")
+    forget()
     with db.connect() as conn:
         return conn.execute(
             f"""
@@ -54,6 +72,7 @@ def create(name, kind, api_key, model, base_url=None, price_in=0, price_out=0, o
 
 
 def update(provider_id, **fields):
+    forget()
     sets, params = [], []
     for k, v in fields.items():
         if k == "api_key":
@@ -73,6 +92,7 @@ def update(provider_id, **fields):
 
 
 def delete(provider_id):
+    forget()
     with db.connect() as conn:
         conn.execute("DELETE FROM providers WHERE id = %s", (provider_id,))
 

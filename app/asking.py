@@ -68,13 +68,12 @@ def best_source(messages, text):
     return max(messages, key=lambda m: len(wanted & _words(m["body"])) if wanted else 0)
 
 
-def _source(chunk, text):
-    with db.connect() as conn:
-        rows = conn.execute(
-            "SELECT wa_msg_id, sender_jid, sender_name, is_bot, body, ts FROM messages "
-            "WHERE group_id = %s AND ts BETWEEN %s AND %s AND NOT is_bot ORDER BY ts",
-            (chunk["group_id"], chunk["start_ts"], chunk["end_ts"]),
-        ).fetchall()
+def _source(chunk, text, conn):
+    rows = conn.execute(
+        "SELECT wa_msg_id, sender_jid, sender_name, is_bot, body, ts FROM messages "
+        "WHERE group_id = %s AND ts BETWEEN %s AND %s AND NOT is_bot ORDER BY ts",
+        (chunk["group_id"], chunk["start_ts"], chunk["end_ts"]),
+    ).fetchall()
     return best_source(rows, text)
 
 
@@ -128,9 +127,16 @@ def try_correction(q, group):
 
 def answer_in(q, group, cite_group=False, found=None):
     """Answer a question from one group. `found` reuses a search already done."""
+    with db.connect() as conn:
+        return _answer_in(conn, q, group, cite_group, found)
+
+
+def _answer_in(conn, q, group, cite_group, found):
+    # One connection for the whole question. Each step used to open its own,
+    # eight or nine per answer, and every one is a backend process in Postgres.
     s = group["settings"]
     t0 = time.perf_counter()
-    chunks, timings = found or retrieval.search(group["external_id"], q.question)
+    chunks, timings = found or retrieval.search(group["external_id"], q.question, conn=conn)
     confidence = chunks[0]["score"] if chunks else 0.0
     text, quote, tokens, cost, provider = s["refusal_text"], None, (None, None), None, None
     outcome, fact_ids, source_id = "refused", [], None
@@ -143,7 +149,9 @@ def answer_in(q, group, cite_group=False, found=None):
             text, outcome = budget.BUDGET_TEXT, "budget"
         else:
             t = time.perf_counter()
-            fact_rows = facts.search(group["external_id"], q.question) if s["decision_tracking"] else []
+            fact_rows = (
+                facts.search(group["external_id"], q.question, conn=conn) if s["decision_tracking"] else []
+            )
             timings["facts_ms"] = round((time.perf_counter() - t) * 1000)
             fact_ids = [r["id"] for r in fact_rows]
             t = time.perf_counter()
@@ -157,7 +165,7 @@ def answer_in(q, group, cite_group=False, found=None):
                 text = f"From {chunks[0]['source_label']}\n\n{text}"
                 outcome = "dm" if cite_group else "answered"
             else:
-                src = _source(chunks[0], text)
+                src = _source(chunks[0], text, conn)
                 if src is None:
                     # The episode was erased between search and answer. The call
                     # was still made and paid for, so it is logged like any other.
@@ -182,6 +190,7 @@ def answer_in(q, group, cite_group=False, found=None):
         tokens=tuple(tokens),
         provider=provider,
         cost=cost,
+        conn=conn,
     )
     return {
         "answer": text,
@@ -200,10 +209,13 @@ def answer_privately(q):
     if not candidates:
         observe.count("ask_total", outcome="dm_unknown")
         return {"answer": NO_DM_GROUP, "quote": None, "outcome": "dm_unknown"}
-    best, best_found, best_score = None, None, -1.0
-    for g in candidates[:DM_CANDIDATES]:
-        found = retrieval.search(g["external_id"], q.question)
-        score = found[0][0]["score"] if found[0] else 0.0
-        if score > best_score:
-            best, best_found, best_score = g, found, score
-    return answer_in(q, best, cite_group=True, found=best_found)
+    by_id = {g["external_id"]: g for g in candidates[:DM_CANDIDATES]}
+    with db.connect() as conn:
+        found = retrieval.search_many(list(by_id), q.question, conn=conn)
+        if found is None:
+            # Nothing indexed in any of their groups yet: answer from the first
+            # with an empty search, so the refusal is logged like any other.
+            group = candidates[0]
+            return _answer_in(conn, q, group, True, ([], {}))
+        best, chunks, timings = found
+        return _answer_in(conn, q, by_id[best], True, (chunks, timings))

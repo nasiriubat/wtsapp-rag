@@ -92,7 +92,9 @@ def main():
                 {
                     "question": "@agent who has the keys?" if i % 2 else "@agent kuka maksoi laskun?",
                     "group_id": external_id,
-                    "sender_jid": "load:asker@s",
+                    # One person may ask ten questions in ten minutes; a load
+                    # test is many people asking at once.
+                    "sender_jid": f"load:asker{i}@s",
                     "wa_msg_id": f"load:q:{i}",
                 },
             )

@@ -4,6 +4,7 @@ corrected by members, retrieved next to chunks so the newest version wins."""
 import json
 import logging
 import re
+from contextlib import nullcontext
 
 import db
 import embed
@@ -38,9 +39,9 @@ def _parse(text):
     return out
 
 
-def similar(group_id, vector, limit=SIMILAR):
+def similar(group_id, vector, limit=SIMILAR, conn=None):
     """Active facts closest to a vector, with what they replaced."""
-    with db.connect() as conn:
+    with nullcontext(conn) if conn is not None else db.connect() as conn:
         rows = conn.execute(
             """
             SELECT f.id, f.statement, f.kind, f.valid_from, f.source_msg_id,
@@ -57,8 +58,8 @@ def similar(group_id, vector, limit=SIMILAR):
     return rows
 
 
-def search(group_id, question):
-    return similar(group_id, embed.literal(embed.query(question)))
+def search(group_id, question, conn=None):
+    return similar(group_id, embed.literal(embed.query(question)), conn=conn)
 
 
 DUPLICATE = 0.97  # cosine above which a "new" fact is the old one restated

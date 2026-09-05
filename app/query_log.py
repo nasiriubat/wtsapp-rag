@@ -1,6 +1,7 @@
 """One writer for the query_log table: questions, refusals and extraction runs."""
 
 import json
+from contextlib import nullcontext
 
 import db
 
@@ -19,13 +20,14 @@ def record(
     tokens=(None, None),
     provider=None,
     cost=None,
+    conn=None,
 ):
     retrieved = {
         "chunks": [{"chunk_id": c["id"], "score": c["score"], "source": c["source"]} for c in chunks],
         "facts": list(fact_ids),
         "timings": timings or {},
     }
-    with db.connect() as conn:
+    with nullcontext(conn) if conn is not None else db.connect() as conn:
         conn.execute(
             """
             INSERT INTO query_log

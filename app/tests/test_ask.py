@@ -42,8 +42,8 @@ def env(client, monkeypatch):
         )
     import facts
 
-    monkeypatch.setattr(retrieval, "search", lambda g, q: fake_chunks(0.9, g))
-    monkeypatch.setattr(facts, "search", lambda g, q: [])
+    monkeypatch.setattr(retrieval, "search", lambda g, q, conn=None: fake_chunks(0.9, g))
+    monkeypatch.setattr(facts, "search", lambda g, q, conn=None: [])
     monkeypatch.setattr(providers, "generate", lambda p, s, u: ("An answer.", 100, 10))
     yield {"client": client, "gid": gid, "group": group, "provider": provider}
     with db.connect() as conn:
@@ -106,7 +106,7 @@ def test_refuses_below_threshold_without_calling_provider(env, monkeypatch):
     import providers
     import retrieval
 
-    monkeypatch.setattr(retrieval, "search", lambda g, q: fake_chunks(0.2, g))
+    monkeypatch.setattr(retrieval, "search", lambda g, q, conn=None: fake_chunks(0.2, g))
     monkeypatch.setattr(providers, "generate", lambda *a: pytest.fail("provider must not be called"))
     assert ask(env).json() == {"answer": "I don't have anything on that.", "quote": None}
 

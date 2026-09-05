@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -180,13 +181,29 @@ def dm_candidates(sender_jid, reported_members):
     ]
 
 
+# Global settings change a few times a year and are read on every question
+# and every extraction tick. A short memo, dropped on every write.
+_settings_memo = {"at": 0.0, "value": None}
+MEMO_SECONDS = 30
+
+
 def global_settings():
+    now = time.monotonic()
+    if _settings_memo["value"] is not None and now - _settings_memo["at"] < MEMO_SECONDS:
+        return dict(_settings_memo["value"])
     with db.connect() as conn:
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
-    return GlobalSettings(**{r["key"]: r["value"] for r in rows}).model_dump()
+    value = GlobalSettings(**{r["key"]: r["value"] for r in rows}).model_dump()
+    _settings_memo.update(at=now, value=value)
+    return dict(value)
+
+
+def forget_settings():
+    _settings_memo.update(at=0.0, value=None)
 
 
 def set_global(**values):
+    forget_settings()
     clean = GlobalSettings(**{**global_settings(), **values}).model_dump()
     with db.connect() as conn:
         for key in values:
@@ -195,4 +212,5 @@ def set_global(**values):
                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
                 (key, json.dumps(clean[key])),
             )
+    forget_settings()
     return clean

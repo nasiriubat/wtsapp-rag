@@ -49,8 +49,12 @@ def env(client, monkeypatch):
             "VALUES (%s, 'q', %s, %s, 'answered')",
             (gid, "Mikko books Rovaniemi.", '{"chunks": [], "facts": [], "timings": {}}'),
         )
-    monkeypatch.setattr(retrieval, "search", lambda g, q: chunk(g))
-    monkeypatch.setattr(facts, "search", lambda g, q: [])
+    monkeypatch.setattr(retrieval, "search", lambda g, q, conn=None: chunk(g))
+    # A private question searches every candidate group at once and picks one.
+    monkeypatch.setattr(
+        retrieval, "search_many", lambda ids, q, conn=None: (ids[0], chunk(ids[0])[0], {"embed_ms": 1})
+    )
+    monkeypatch.setattr(facts, "search", lambda g, q, conn=None: [])
     monkeypatch.setattr(providers, "generate", lambda p, s, u: ("An answer.", 10, 5))
     yield {"client": client, "gid": gid, "group": group}
     with db.connect() as conn:

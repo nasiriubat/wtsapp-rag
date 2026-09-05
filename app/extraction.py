@@ -31,7 +31,16 @@ def _mark(chunk_id):
 
 def run_once():
     global_settings = groups.global_settings()
+    with db.connect() as conn:
+        pending_by_group = {
+            r["group_id"]: r["n"]
+            for r in conn.execute(
+                "SELECT group_id, count(*) AS n FROM chunks WHERE NOT facts_extracted GROUP BY group_id"
+            )
+        }
     for group in groups.list_all():
+        if not pending_by_group.get(group["external_id"]):
+            continue  # nothing to do: no provider lookup, no budget scan
         if not group["enabled"] or not group["settings"]["decision_tracking"]:
             continue
         provider = providers.resolve(group, global_settings)
