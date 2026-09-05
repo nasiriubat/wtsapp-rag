@@ -61,6 +61,15 @@ The first start downloads about 2.5 GB of models, which takes a few minutes.
 Watch it finish with `docker compose logs -f app`, or just wait until
 `http://localhost:8000/admin` answers.
 
+Make the two files that hold secrets readable by you alone. `.env` has the
+master key; `gateway/auth_state/` becomes a live WhatsApp session once you
+pair:
+
+```
+chmod 600 .env
+chmod -R go-rwx gateway/auth_state
+```
+
 **Back up `.env` somewhere separate from the database.** `SECRET_KEY` is the
 only thing that can decrypt the provider keys and channel tokens inside a
 database dump.
@@ -75,6 +84,12 @@ for a minute.
 
 Everything is bound to localhost. To reach the panel from another machine,
 put a reverse proxy with TLS in front of it rather than publishing the port.
+Two things to know when you do. The login lockout counts against the address
+your proxy reports in `X-Forwarded-For`, and only the addresses in
+`TRUSTED_PROXY` in `.env` may set that header; the default covers a proxy on
+the same machine or on a Docker network. And `/metrics` and the detailed
+`/health` need the gateway token, so a proxy in front of the panel exposes
+nothing about how busy your groups are.
 
 The wizard at **http://localhost:8000/setup** walks the same five steps this
 guide does, and remembers where you are.
@@ -106,7 +121,8 @@ Then:
 1. **Name** is yours to choose. It appears on the Cost page.
 2. **Prices** are euros per million tokens, input and output, from that
    provider's pricing page. They start at 0, which makes every answer look
-   free and makes budget caps useless, so fill them in.
+   free and makes budget caps useless, so fill them in. A new install has a
+   €10 monthly cap across all groups; change it on the Cost page.
 3. Press **List the models** and pick one from the dropdown. It asks the
    provider what your key can actually use, so you never have to know a model
    id by heart. Typing one by hand still works.

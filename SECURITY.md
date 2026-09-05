@@ -32,6 +32,15 @@ panel. Everything below follows from that.
 - **XSS in the panel.** Templates autoescape, the few hand-built HTML
   fragments escape explicitly, and the one `| safe` renders a QR code the
   server drew itself.
+- **A member choosing a file name.** Files shared in a chat are named by
+  whoever shared them, and the name ends up in the prompt and in the reply.
+  Control characters and angle brackets are stripped, the name is capped, and
+  every spelling of the prompt's `<chat>` and `<document>` tags inside
+  material is neutralised, not just the exact closing tag.
+- **One person flooding the bot.** A sender gets ten questions in ten
+  minutes across all groups; past that they are told to wait, before any
+  retrieval or provider call. A fresh install also ships with a €10 monthly
+  cap, so an unnoticed loop cannot run up an open-ended bill.
 - **Mention abuse.** Discord answers are sent with no mention parsing, so an
   answer that quotes `@everyone` from the chat pings nobody.
 
@@ -39,8 +48,13 @@ panel. Everything below follows from that.
 
 - The admin panel uses one password, a signed session cookie (`HttpOnly`,
   `SameSite=Lax`) and a CSRF token derived from the session. Login is rate
-  limited per client address. The JSON API under `/api` uses HTTP Basic with
-  the same password.
+  limited twice: five wrong guesses pause one client for a minute, and twenty
+  wrong guesses a minute from anywhere pause everyone, so rotating
+  `X-Forwarded-For` buys nothing. Only the addresses in `TRUSTED_PROXY` may
+  set forwarded headers at all. The JSON API under `/api` uses HTTP Basic
+  with the same password and its own lockout bucket.
+- Sessions are signed with a salt that includes the password, so changing
+  `ADMIN_PASSWORD` logs every session out, including a thief's.
 - The gateway authenticates with a shared bearer token. `/ingest`, `/ask` and
   the gateway's config and state endpoints accept nothing without it.
 - Provider keys and channel tokens are encrypted at rest with pgcrypto using
@@ -63,8 +77,9 @@ Say these out loud before running it:
   environment or the database volume with that key can read every provider key
   and channel token. It also signs sessions and derives CSRF tokens; splitting
   those is a later change.
-- **A stolen session cookie is valid until it expires** (seven days). Logging
-  out deletes the cookie but does not revoke the signature.
+- **A stolen session cookie is valid until it expires** (seven days) or
+  until the password is changed. Logging out deletes the cookie but does not
+  revoke the signature.
 - **No transport security of its own.** Serve the panel and the Cloud API
   webhook behind TLS you control, and run uvicorn with `--proxy-headers` so
   the session cookie is marked `Secure`.
@@ -75,8 +90,9 @@ Say these out loud before running it:
   admin actions.
 - **No protection against a malicious provider.** A provider you configure
   sees the excerpts you send it.
-- **Denial of service is out of scope.** There is no request throttling beyond
-  the login lockout and the monthly budget cap.
+- **Denial of service is out of scope** beyond the login lockout, the
+  per-sender question limit, the budget cap, the 1 MB webhook body cap and
+  the bounded retry queue. Nothing rate-limits `/ingest` itself.
 - **Login itself has no CSRF token**, so a third party can force a visiting
   admin's browser into a session they control. It gets them no access to this
   instance; it can mislead the admin about which instance they are looking at.
@@ -84,6 +100,10 @@ Say these out loud before running it:
   the panel and the webhook to loopback. Whatever you put in front of them is
   yours to secure, and `--proxy-headers` is already set so the session cookie
   is marked `Secure` behind a TLS proxy.
-- **A member list that comes back empty** is treated as "this channel cannot
-  list members", which falls back to "has written here". A transient empty
-  list therefore widens private access for as long as it lasts.
+- **Membership is what the channel last reported.** The list is kept in the
+  database, so a restart does not widen access. For WhatsApp, a group the
+  gateway has not reported yet has no members at all; for Telegram and
+  Discord, which cannot list members, having written in the group is the
+  evidence there is.
+- **The gateway's own log** identifies senders by a keyed hash, not their
+  number, so it can be kept longer than the chat itself.

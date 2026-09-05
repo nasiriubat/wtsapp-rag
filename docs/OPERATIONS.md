@@ -9,8 +9,9 @@ repository root and `docker compose`.
 docker compose ps                  # what is up
 docker compose logs -f app         # JSON lines, one object per event
 docker compose logs -f gateway     # channel connections and every message seen
-curl -s localhost:8000/health      # db, last chunk, unchunked backlog
-curl -s localhost:8000/metrics     # Prometheus text: ingest, answers, latency
+curl -s localhost:8000/health      # {"db": "ok", "loops": "ok"}; 503 when either is not
+curl -s -H "authorization: Bearer $GATEWAY_TOKEN" localhost:8000/health   # plus backlog and stalled loops
+curl -s -H "authorization: Bearer $GATEWAY_TOKEN" localhost:8000/metrics  # Prometheus text: ingest, answers, latency
 ```
 
 The admin panel's Health page shows the same figures plus spend and disk.
@@ -18,14 +19,30 @@ The admin panel's Health page shows the same figures plus spend and disk.
 ## Backup
 
 The database holds everything: messages, chunks, facts, settings, and the
-provider keys and channel tokens encrypted with `SECRET_KEY`.
+provider keys and channel tokens encrypted with `SECRET_KEY`. **A dump is the
+plain text of every conversation the assistant has logged.** It is personal
+data and inherits whatever retention and access rules the chats themselves
+have; a dump left in a home directory is the easiest way to lose it all.
+
+Encrypt it on the way out. [age](https://age-encryption.org) is one small
+tool that does nothing else:
 
 ```
-docker compose exec -T db pg_dump -U assistant -Fc assistant > backup-$(date +%F).dump
+docker compose exec -T db pg_dump -U assistant -Fc assistant \
+  | age -r age1yourpublickey... > backup-$(date +%F).dump.age
+```
+
+Then put it somewhere that is not this machine, and delete copies older than
+you need. A nightly line in cron or a systemd timer does the job:
+
+```
+0 3 * * * cd /srv/wtsap-rag && docker compose exec -T db pg_dump -U assistant -Fc assistant | age -r age1... > /backups/assistant-$(date +\%F).dump.age && find /backups -name 'assistant-*.age' -mtime +30 -delete
 ```
 
 **Back up `.env` with it, in a different place.** A dump without `SECRET_KEY`
-restores the rows but no key or token in it can be decrypted.
+restores the rows but no key or token in it can be decrypted. Keep `.env`
+readable by you alone (`chmod 600 .env`), and the same for
+`gateway/auth_state/`, which is a live WhatsApp session.
 
 The `gateway/auth_state/` directory holds the WhatsApp pairing. Losing it
 means scanning a new QR, nothing worse.
@@ -39,7 +56,7 @@ encrypted provider key decrypted afterwards with the same `SECRET_KEY`.
 docker compose up -d db
 docker compose exec -T db psql -U assistant -d postgres -c "DROP DATABASE IF EXISTS assistant"
 docker compose exec -T db psql -U assistant -d postgres -c "CREATE DATABASE assistant"
-docker compose exec -T db pg_restore -U assistant -d assistant --no-owner < backup-2026-09-04.dump
+age -d -i key.txt backup-2026-09-04.dump.age | docker compose exec -T db pg_restore -U assistant -d assistant --no-owner
 docker compose up -d
 ```
 
@@ -66,8 +83,8 @@ dump to go back.
 
 - **Provider key or channel token:** paste the new one on the Providers or
   Channels page. The old value is overwritten; nothing else changes.
-- **`ADMIN_PASSWORD`:** edit `.env`, `docker compose up -d app`. Existing
-  sessions stay valid until they expire.
+- **`ADMIN_PASSWORD`:** edit `.env`, `docker compose up -d app`. Every
+  session is logged out at once, yours included; that is the point.
 - **`GATEWAY_TOKEN`:** edit `.env`, then restart both services together, or
   the gateway will be rejected until it restarts.
 - **`SECRET_KEY`:** this one is not a simple swap. It decrypts every stored
