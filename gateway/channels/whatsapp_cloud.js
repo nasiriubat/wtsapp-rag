@@ -10,6 +10,16 @@ import { blankState } from "../core.js";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const PATH = "/webhook/whatsapp_cloud";
 const PORT = Number(process.env.GATEWAY_PORT || 8080);
+// Meta's payloads are a few kilobytes. This listener is public, so anything
+// larger is refused before the signature is even checked.
+export const MAX_BODY = 1024 * 1024;
+const SEEN = 1000; // message ids remembered, so a retried delivery is not answered twice
+
+function same(a, b) {
+  const x = Buffer.from(String(a ?? ""));
+  const y = Buffer.from(String(b ?? ""));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
 
 export function signatureOk(raw, header, appSecret) {
   const sent = String(header || "").replace(/^sha256=/, "");
@@ -20,7 +30,7 @@ export function signatureOk(raw, header, appSecret) {
 }
 
 export function verification(query, verifyToken) {
-  return query.get("hub.mode") === "subscribe" && query.get("hub.verify_token") === verifyToken
+  return query.get("hub.mode") === "subscribe" && same(query.get("hub.verify_token"), verifyToken)
     ? query.get("hub.challenge")
     : null;
 }
@@ -54,14 +64,25 @@ export function incoming(body) {
   return out;
 }
 
+// Null when the body is over the cap; the caller answers 413 and drops the socket.
 async function readBody(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY) return null;
+    chunks.push(chunk);
+  }
   return Buffer.concat(chunks);
 }
 
 export async function start(core, config, log) {
   const state = { ...blankState(), connected: true, jid: config.phone_number_id };
+  const seen = new Set();
+  function remember(id) {
+    seen.add(id);
+    if (seen.size > SEEN) seen.delete(seen.values().next().value);
+  }
 
   async function send(to, text) {
     const res = await fetch(`${GRAPH}/${config.phone_number_id}/messages`, {
@@ -84,6 +105,11 @@ export async function start(core, config, log) {
     }
     if (req.method !== "POST") return res.writeHead(405).end();
     const raw = await readBody(req);
+    if (raw === null) {
+      log.warn("cloud webhook body too large");
+      res.writeHead(413).end();
+      return req.destroy();
+    }
     if (!signatureOk(raw, req.headers["x-hub-signature-256"], config.app_secret)) {
       log.warn("cloud webhook signature rejected");
       return res.writeHead(401).end();
@@ -97,7 +123,8 @@ export async function start(core, config, log) {
       return log.error({ err: err.message }, "cloud webhook is not JSON");
     }
     for (const payload of payloads) {
-      if (payload.body === null) continue;
+      if (payload.body === null || seen.has(payload.wa_msg_id)) continue;
+      remember(payload.wa_msg_id);
       core
         .handleDirect(payload, (answer) => send(payload.sender_jid.split("@")[0], answer))
         .catch((err) => log.error({ err: err.message }, "cloud handle failed"));
@@ -112,10 +139,20 @@ export async function start(core, config, log) {
     });
   });
 
+  // A client that sends headers slowly, or a body slowly, is cut off; Meta is neither.
+  server.headersTimeout = 5_000;
+  server.requestTimeout = 10_000;
   await new Promise((resolve, reject) => {
     server.on("error", reject);
     server.listen(PORT, resolve);
   });
   log.info({ port: PORT, path: PATH }, "cloud webhook listening");
-  return { report: () => core.report("whatsapp_cloud", state), stop: () => server.close() };
+  return {
+    report: () => core.report("whatsapp_cloud", state),
+    stop: () => {
+      server.close();
+      // Keep-alive sockets would otherwise hold the port through a restart.
+      server.closeAllConnections();
+    },
+  };
 }

@@ -15,12 +15,28 @@ export function fileOf(msg) {
   const doc = m.documentMessage ?? wrapped;
   if (doc) {
     const media = wrapped ? { ...msg, message: { documentMessage: wrapped } } : msg;
-    return { filename: doc.fileName ?? `document-${msg.key.id}`, mime: doc.mimetype ?? null, media };
+    return {
+      filename: doc.fileName ?? `document-${msg.key.id}`,
+      mime: doc.mimetype ?? null,
+      size: doc.fileLength == null ? null : Number(doc.fileLength),
+      media,
+    };
   }
   if (m.imageMessage) {
-    return { filename: `image-${msg.key.id}.jpg`, mime: m.imageMessage.mimetype ?? "image/jpeg", media: msg };
+    return {
+      filename: `image-${msg.key.id}.jpg`,
+      mime: m.imageMessage.mimetype ?? "image/jpeg",
+      size: m.imageMessage.fileLength == null ? null : Number(m.imageMessage.fileLength),
+      media: msg,
+    };
   }
   return null;
+}
+
+// Reconnect delays: 1 s doubling to 5 min. A tight reconnect loop against
+// WhatsApp's servers is the surest way to get a number flagged.
+export function backoff(previousMs) {
+  return Math.min(previousMs ? previousMs * 2 : 1000, 300_000);
 }
 
 export function contextOf(msg) {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bare, fileOf, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
+import { backoff, bare, fileOf, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
 
 const OWN = "358401111111@s.whatsapp.net";
 const OWN_LID = "123456789@lid";
@@ -91,7 +91,7 @@ test("fileOf finds documents and pictures, and ignores everything else", () => {
   const doc = { key, message: { documentMessage: { fileName: "rules.pdf", mimetype: "application/pdf" } } };
   assert.deepEqual(
     { ...fileOf(doc), media: undefined },
-    { filename: "rules.pdf", mime: "application/pdf", media: undefined },
+    { filename: "rules.pdf", mime: "application/pdf", size: null, media: undefined },
   );
 
   const image = { key, message: { imageMessage: { mimetype: "image/jpeg", caption: "the rota" } } };
@@ -108,4 +108,19 @@ test("fileOf finds documents and pictures, and ignores everything else", () => {
 
   assert.equal(fileOf({ key, message: { audioMessage: {} } }), null);
   assert.equal(fileOf({ key, message: { conversation: "hello" } }), null);
+});
+
+test("backoff doubles from a second and stops at five minutes", () => {
+  assert.equal(backoff(0), 1000);
+  assert.equal(backoff(1000), 2000);
+  assert.equal(backoff(200_000), 300_000);
+  assert.equal(backoff(300_000), 300_000);
+});
+
+test("fileOf carries the size the platform declares, so a huge file is refused before download", () => {
+  const key = { remoteJid: "120363@g.us", id: "M9" };
+  const big = { key, message: { documentMessage: { fileName: "video.pdf", fileLength: "52428800" } } };
+  assert.equal(fileOf(big).size, 52428800);
+  const unknown = { key, message: { imageMessage: {} } };
+  assert.equal(fileOf(unknown).size, null);
 });

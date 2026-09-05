@@ -51,3 +51,34 @@ test("survives a restart and skips a line cut short by a crash", async () => {
   await q2.flush();
   assert.deepEqual(delivered, [{ wa_msg_id: "kept" }]);
 });
+
+test("a message the app keeps rejecting is set aside so the rest can flow", async () => {
+  const file = tmpFile();
+  const warnings = [];
+  const q = createQueue(file, async (route, body) => body.wa_msg_id !== "poison", {
+    maxAttempts: 3,
+    warn: (fields, msg) => warnings.push(msg),
+  });
+  q.push("/ingest", { wa_msg_id: "poison" });
+  q.push("/ingest", { wa_msg_id: "2" });
+  await q.flush();
+  await q.flush();
+  assert.equal(q.size(), 2, "two attempts: still waiting behind the poison");
+  await q.flush();
+  assert.equal(q.size(), 0, "third failure moves it aside and the rest delivers");
+  assert.match(warnings.join(" "), /dead-letter/);
+  assert.match(fs.readFileSync(file.replace(".jsonl", ".dead.jsonl"), "utf8"), /poison/);
+});
+
+test("the queue drops its oldest messages rather than growing without bound", async () => {
+  const file = tmpFile();
+  const warnings = [];
+  const q = createQueue(file, async () => false, { max: 3, warn: (f, m) => warnings.push(m) });
+  for (const id of ["1", "2", "3", "4", "5"]) q.push("/ingest", { wa_msg_id: id });
+  assert.equal(q.size(), 3);
+  assert.deepEqual(
+    fs.readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l).body.wa_msg_id),
+    ["3", "4", "5"],
+  );
+  assert.equal(warnings.length, 2);
+});

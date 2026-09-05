@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import qrcode from "qrcode-terminal";
 import { blankState } from "../core.js";
-import { bare, fileOf, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
+import { backoff, bare, fileOf, isTrigger, questionOf, quoteStub, textOf, toPayload } from "../lib.js";
 
 const AUTH_DIR = "auth_state";
 
@@ -23,6 +23,7 @@ export async function start(core, config, log) {
   let sock = null;
   let relinking = false;
   let stopped = false;
+  let retryMs = 0;
   const report = () => core.report("whatsapp", state);
 
   // The ids we sent ourselves. Pairing with the operator's own number makes
@@ -83,6 +84,7 @@ export async function start(core, config, log) {
         Object.assign(state, { connected: false, qr });
       }
       if (connection === "open") {
+        retryMs = 0;
         log.info({ jid: sock.user?.id, lid: sock.user?.lid }, "whatsapp connected");
         Object.assign(state, { connected: true, jid: bare(sock.user?.id), qr: null, groups: await listGroups() });
       }
@@ -96,10 +98,14 @@ export async function start(core, config, log) {
           clearAuth();
           log.warn(relinking ? "logged out for relink; pairing again" : "logged out by the phone; pairing again");
           relinking = false;
+          retryMs = 0;
         } else {
-          log.warn({ code }, "whatsapp closed, reconnecting");
+          retryMs = backoff(retryMs);
+          log.warn({ code, retry_ms: retryMs }, "whatsapp closed, reconnecting");
         }
-        connect();
+        setTimeout(() => {
+          if (!stopped) connect().catch((err) => log.error({ err: err.message }, "reconnect failed"));
+        }, retryMs);
       }
       await report();
     });
@@ -130,7 +136,7 @@ export async function start(core, config, log) {
         }
         const ours = ourSends.has(msg.key.id);
         const shared = group.files && !ours ? fileOf(msg) : null;
-        if (shared) {
+        if (shared && core.fileAllowed(shared.size, shared.filename)) {
           shareFile(msg, shared).catch((err) =>
             log.warn({ err: err.message, filename: shared.filename }, "could not fetch shared file"),
           );

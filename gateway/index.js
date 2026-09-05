@@ -15,9 +15,14 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-// One channel must never take the others down with it.
+// One channel must never take the others down with it: a rejected promise is
+// logged and life goes on. An uncaught exception is different, the process is
+// in an unknown state; log the trace and let the orchestrator restart it.
 process.on("unhandledRejection", (err) => log.error({ err: err?.message }, "unhandled rejection"));
-process.on("uncaughtException", (err) => log.error({ err: err?.message }, "uncaught exception"));
+process.on("uncaughtException", (err) => {
+  log.fatal({ err: err?.message, stack: err?.stack }, "uncaught exception; exiting");
+  process.exit(1);
+});
 
 const MODULES = { whatsapp, telegram, discord, whatsapp_cloud: whatsappCloud };
 const core = createCore({ appUrl: APP_URL, token: TOKEN, log });
@@ -79,9 +84,23 @@ async function sync() {
   return true;
 }
 
+// docker compose stop sends SIGTERM: close every channel cleanly, try once
+// more to hand queued messages to the app, then go.
+let stopping = false;
+async function shutdown(signal) {
+  if (stopping) return;
+  stopping = true;
+  log.info({ signal }, "shutting down");
+  await Promise.all([...running.keys()].map((kind) => stop(kind)));
+  await core.flush().catch((err) => log.warn({ err: err.message }, "final flush failed"));
+  process.exit(0);
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 // One loop, so a slow sync can never overlap the next one. The app loads its
 // models for a while after boot; poll fast until it answers.
-for (;;) {
+while (!stopping) {
   const ok = await sync().catch((err) => log.error({ err: err.message }, "sync failed"));
   await new Promise((resolve) => setTimeout(resolve, ok ? 30_000 : 5_000));
 }

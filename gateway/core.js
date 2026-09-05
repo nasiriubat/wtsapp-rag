@@ -25,7 +25,9 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
 
   // Only outages are worth retrying. A 4xx is the app saying no to this payload.
   const retryable = (status) => status === 0 || status >= 500;
-  const queue = createQueue(queueFile, async (route, body) => !retryable((await post(route, body)).status));
+  const queue = createQueue(queueFile, async (route, body) => !retryable((await post(route, body)).status), {
+    warn: (fields, msg) => log.warn(fields, msg),
+  });
   // unref: the timer must not keep a test process alive on its own.
   setInterval(() => queue.flush().catch((err) => log.error({ err: err.message }, "queue flush failed")), 10_000).unref();
 
@@ -47,11 +49,18 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
   // message. The app decides whether to keep it.
   const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
-  async function shareFile({ groupId, senderJid, filename, mime, bytes }) {
-    if (!bytes || bytes.length > MAX_FILE_BYTES) {
-      log.info({ group_id: groupId, filename, bytes: bytes?.length ?? 0 }, "shared file skipped");
-      return;
+  // Channels ask this with the size the platform declares, before downloading:
+  // a 500 MB attachment must be refused without ever being fetched.
+  function fileAllowed(size, filename) {
+    if (size != null && Number(size) > MAX_FILE_BYTES) {
+      log.info({ filename, bytes: Number(size) }, "shared file skipped: too large");
+      return false;
     }
+    return true;
+  }
+
+  async function shareFile({ groupId, senderJid, filename, mime, bytes }) {
+    if (!bytes || !fileAllowed(bytes.length, filename)) return;
     log.info({ group_id: groupId, filename, bytes: bytes.length }, "shared file");
     await post("/ingest/file", {
       group_id: groupId,
@@ -123,6 +132,9 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
     handle,
     handleDirect,
     shareFile,
+    fileAllowed,
+    // One last delivery attempt before the process goes; used on SIGTERM.
+    flush: () => queue.flush(),
     groupFor: (externalId) => groups.get(externalId),
     report: (channel, state) => post("/gateway/state", { channel, ...state }),
   };

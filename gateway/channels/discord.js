@@ -93,6 +93,7 @@ export async function start(core, config, log) {
     const payload = payloadFromDiscord(m, client.user.id);
     if (group.files) {
       for (const attachment of m.attachments.values()) {
+        if (!core.fileAllowed(attachment.size, attachment.name)) continue;
         shareFile(payload, attachment).catch((err) =>
           log.warn({ err: err.message, filename: attachment.name }, "could not fetch shared file"),
         );

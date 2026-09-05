@@ -29,10 +29,13 @@ export function payloadFromTelegram(msg, botId) {
 // ladder of sizes; the last one is the biggest.
 export function telegramFile(msg) {
   if (msg.document) {
-    return { id: msg.document.file_id, filename: msg.document.file_name ?? "document", mime: msg.document.mime_type };
+    const d = msg.document;
+    return { id: d.file_id, filename: d.file_name ?? "document", mime: d.mime_type, size: d.file_size ?? null };
   }
   const photo = (msg.photo ?? []).at(-1);
-  if (photo) return { id: photo.file_id, filename: `photo-${msg.message_id}.jpg`, mime: "image/jpeg" };
+  if (photo) {
+    return { id: photo.file_id, filename: `photo-${msg.message_id}.jpg`, mime: "image/jpeg", size: photo.file_size ?? null };
+  }
   return null;
 }
 
@@ -88,7 +91,7 @@ export async function start(core, config, log) {
     if (!group) return;
     const payload = payloadFromTelegram(msg, me.id);
     const shared = group.files && !payload.is_bot ? telegramFile(msg) : null;
-    if (shared) {
+    if (shared && core.fileAllowed(shared.size, shared.filename)) {
       shareFile(ctx, payload, shared).catch((err) =>
         log.warn({ err: err.message, filename: shared.filename }, "could not fetch shared file"),
       );
