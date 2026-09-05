@@ -4,19 +4,37 @@ updates:
     directory: /app
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-minor:
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /gateway
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      node-minor:
+        update-types: [minor, patch]
+  # A new Python or Node major is a decision, not an update.
   - package-ecosystem: docker
     directory: /app
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directory: /gateway
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        update-types: [major, minor, patch]
