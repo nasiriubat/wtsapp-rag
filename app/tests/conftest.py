@@ -2,6 +2,12 @@ import os
 
 import pytest
 
+# The suite mutates global settings and runs retention; it must never meet the
+# database the panel is using. The name has to say so.
+_db_name = os.environ.get("DATABASE_URL", "").rsplit("/", 1)[-1].split("?")[0]
+if _db_name and not _db_name.endswith("_test"):
+    pytest.exit(f"DATABASE_URL points at {_db_name!r}; tests only run against a database named *_test", 3)
+
 GW = {"authorization": f"Bearer {os.environ.get('GATEWAY_TOKEN', '')}"}
 AUTH = ("admin", os.environ.get("ADMIN_PASSWORD", ""))
 needs_db = pytest.mark.skipif(not os.environ.get("DATABASE_URL"), reason="needs Postgres (DATABASE_URL)")

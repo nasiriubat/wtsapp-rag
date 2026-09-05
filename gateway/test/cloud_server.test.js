@@ -60,6 +60,28 @@ test("a body over the cap is refused before the signature is checked", async () 
   assert.match(ok, /OK3/);
 });
 
+test("a signed delivery reaches the app once, and Meta's retry of it does not", async () => {
+  const crypto = await import("node:crypto");
+  const seen = [];
+  core.handleDirect = async (payload) => seen.push(payload);
+  const body = JSON.stringify({
+    entry: [{ changes: [{ value: {
+      contacts: [{ wa_id: "358401234567", profile: { name: "Anna" } }],
+      messages: [{ id: "wamid.1", from: "358401234567", timestamp: "1756800000", type: "text", text: { body: "hello?" } }],
+    } }] }],
+  });
+  const sig = "sha256=" + crypto.createHmac("sha256", "sec").update(body).digest("hex");
+  const request =
+    `POST /webhook/whatsapp_cloud HTTP/1.1\r\nHost: x\r\nContent-Length: ${Buffer.byteLength(body)}\r\n` +
+    `X-Hub-Signature-256: ${sig}\r\nConnection: close\r\n\r\n${body}`;
+  assert.match(await raw(request), /200/);
+  assert.match(await raw(request), /200/);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].sender_jid, "358401234567@s.whatsapp.net");
+  assert.equal(seen[0].body, "hello?");
+});
+
 test("an unsigned POST is rejected and never reaches the app", async () => {
   let called = false;
   core.handleDirect = async () => (called = true);

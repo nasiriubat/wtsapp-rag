@@ -32,6 +32,7 @@ docker compose exec -T app python scripts/eval.py evals/cabin.jsonl \
 
 | Run | Set | Answering model | Judge | Questions | Answer accuracy | Citation accuracy | Abstention | False refusal | p50 | p95 | Cost/question |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2026-09-05 (int8 reranker) | cabin | gpt-5.4-mini | claude-opus-5 | 12 | 100% | 67% | 100% | 0% | 1011 ms | 1321 ms | €0.00040 |
 | 2026-09-05 | cabin | gpt-5.4-mini | claude-opus-5 | 12 | 100% | 67% | 100% | 0% | 1668 ms | 2185 ms | €0.00033 |
 | 2026-09-04 | cabin | claude-opus-5 | gpt-5.4-mini | 12 | 100% | 56% | 100% | 0% | 3448 ms | 4245 ms | €0.00744 |
 | 2026-09-04 | cabin | gpt-5.4-mini | claude-opus-5 | 12 | 56% | 60% | 100% | 44% | 1644 ms | 2761 ms | €0.00014 |
@@ -75,7 +76,9 @@ eval after changing a default, not only after changing the code.
 |---|---|
 | Ingest 500 messages (a busy group's day) | p50 6 ms, p95 7 ms |
 | Chunk those 500 messages into 34 chunks | 1.1 s |
-| 30 questions at concurrency 4 | p50 4.45 s, p95 4.85 s, max 4.95 s, 0 failed |
+| 30 questions at concurrency 4, v1.0 | p50 4.45 s, p95 4.85 s, max 4.95 s, 0 failed |
+| 30 questions at concurrency 4, before the v1.1 changes, senders rotated | p50 5.34 s, p95 8.05 s, 0.71 answers/s |
+| 30 questions at concurrency 4, after | p50 3.32 s, p95 6.26 s, 1.03 answers/s |
 
 Ingest is far inside the one-second target. A single question answers in about
 1.6 s; four at once push p95 to 4.85 s, which is at the edge of the five-second
@@ -83,6 +86,27 @@ target. The local reranker is the bottleneck: it is CPU-bound and the answers
 queue behind each other. A group that asks four questions in the same second is
 already unusual, but this is the number to watch when tuning
 `retrieval.RERANK`.
+
+## The reranker, measured
+
+The cross-encoder is where an answer spends its time. Ten full-length
+candidates (about 400 tokens each), one session on half the cores of a
+14-core laptop:
+
+| Export | Per rerank | Top logit on the same pair |
+|---|---:|---:|
+| fp32, `EmbeddedLLM/bge-reranker-v2-m3-onnx-o3-cpu` (v1.0) | 2281 ms | 3.24 |
+| int8, `onnx-community/bge-reranker-v2-m3-ONNX` (v1.1) | 832 ms | 3.28 |
+
+On one-line documents the same session takes 300 ms, which is where the
+earlier "3.3 s" note in the code came from being measured on real chunks.
+The eval row above shows the int8 export scoring the same on every question
+while cutting p50 by 40%, so it ships. Both models are now pinned to a
+commit in `app/models.py`.
+
+Two sessions run at once, each on half the cores; a third question waits.
+One session on every core measured 425 ms against 298 ms on half, and four
+unbounded sessions fought each other and the background loops.
 
 ## What these runs did not settle
 

@@ -1,12 +1,21 @@
-fastapi==0.128.8
+fastapi==0.141.1
 uvicorn==0.39.0
 psycopg[binary]==3.2.13
-fastembed==0.7.4
+fastembed==0.8.0
 httpx==0.28.1
 jinja2==3.1.6
 itsdangerous==2.2.0
-python-multipart==0.0.20
+python-multipart==0.0.31
 segno==1.6.6
-# Uploaded documents. The extras are the parsers we need and nothing else:
-# Docling and unstructured pull PyTorch, which would triple the image.
-markitdown[pdf,docx,pptx,xlsx]==0.1.7
+# Uploaded documents. MarkItDown with the parsers we need and nothing else:
+# Docling and unstructured pull PyTorch, which would triple the image, and
+# MarkItDown's own xlsx extra pulls pandas for one converter, so spreadsheets
+# are read with openpyxl directly. pdfplumber and magika are imported here or
+# run on untrusted input, so they are pinned rather than left to ranges.
+markitdown[pdf,docx,pptx]==0.1.7
+openpyxl==3.1.5
+pdfplumber==0.11.10
+magika==0.6.3
+# Transitive, with published advisories below these versions.
+pillow>=12.3.0
+starlette>=1.3.1

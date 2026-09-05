@@ -10,6 +10,7 @@ import logging
 import pathlib
 import re
 
+import openpyxl
 import pdfplumber
 from markitdown import MarkItDown, StreamInfo
 
@@ -27,6 +28,8 @@ VISION_PAGES = 20  # a scanned page costs one model call, so cap the bill
 TEXT_PER_PAGE = 80  # below this a PDF page has no text layer worth keeping
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic", ".tiff"}
+SPREADSHEET_EXTENSIONS = {".xlsx", ".xlsm"}
+MAX_ROWS = 50_000
 
 PROMPT = (
     "Transcribe this page for a search index. Write out every word you can read, "
@@ -118,6 +121,30 @@ def _scanned(filename, pages, provider):
     return parts
 
 
+def _spreadsheet(filename, data):
+    """One part per sheet, rows as pipe-separated cells. MarkItDown would do
+    this through pandas, which is a lot of library for a price list."""
+    try:
+        book = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception as e:
+        raise Unreadable(f"this spreadsheet could not be read: {e}") from e
+    parts, rows = [], 0
+    for sheet in book.worksheets:
+        lines = []
+        for row in sheet.iter_rows(values_only=True):
+            cells = ["" if v is None else str(v) for v in row]
+            if any(cells):
+                lines.append(" | ".join(cells).rstrip(" |"))
+                rows += 1
+            if rows > MAX_ROWS:
+                raise Unreadable(f"this spreadsheet has more than {MAX_ROWS:,} rows. Split it up.")
+        if lines:
+            parts += _slice("\n".join(lines), f"{filename}, sheet {sheet.title}")
+    if not parts:
+        raise Unreadable("this spreadsheet is empty")
+    return parts
+
+
 def _bounded(parts):
     total = sum(len(text) for _, text in parts)
     if len(parts) > MAX_PARTS or total > MAX_TEXT:
@@ -144,6 +171,8 @@ def _read(filename, mime, data, provider):
         return [(filename, _describe(provider, data, mime or "image/png"))]
     if extension == ".pdf" or mime == "application/pdf":
         return _pdf(filename, data, provider)
+    if extension in SPREADSHEET_EXTENSIONS:
+        return _spreadsheet(filename, data)
 
     try:
         result = _markitdown().convert_stream(

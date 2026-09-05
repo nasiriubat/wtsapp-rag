@@ -30,7 +30,9 @@ services:
       # front of it, or open a tunnel, rather than publishing this.
       - "127.0.0.1:8000:8000"
     volumes:
-      # Embedding and reranker models, downloaded once.
+      # Embedding and reranker models, downloaded once. The app runs as an
+      # unprivileged user; a volume created by an older root image needs
+      # `docker compose run --rm --user root app chown -R app:app /models` once.
       - models:/models
       # Eval sets, read by scripts/eval.py.
       - ./evals:/app/evals:ro
@@ -39,7 +41,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      # First start downloads ~2.5 GB of models.
+      # First start downloads ~1 GB of models.
       start_period: 600s
     restart: unless-stopped
 

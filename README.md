@@ -63,13 +63,14 @@ links, in [docs/SETUP.md](docs/SETUP.md#4-connect-a-channel).
 
 ## Quickstart
 
-Needs Docker Compose v2, about 2 GB of RAM for the local models, an LLM API
+Needs Docker Compose v2, 4 GB of RAM (the app settles around 3 GB with the
+local models loaded), an LLM API
 key, and a phone with plain WhatsApp on a dedicated number.
 
 ```
 git clone https://github.com/nasiriubat/wtsapp-rag.git && cd wtsapp-rag
 cp .env.example .env         # set the passwords and secrets; see the comments
-docker compose up -d --build # first start downloads ~2.5 GB of models
+docker compose up -d --build # first start downloads ~1 GB of models
 ```
 
 Open `http://localhost:8000/setup`, log in with `ADMIN_PASSWORD`, and follow
@@ -154,8 +155,9 @@ Pipeline for one question, with numbers measured on a laptop CPU:
 ```
 pip install -r app/requirements-dev.txt
 ruff check app && ruff format --check app
-pytest                      # unit tests; set DATABASE_URL, SECRET_KEY, ADMIN_PASSWORD, GATEWAY_TOKEN for the integration tests
-                            # point DATABASE_URL at a scratch database, not the one the panel is using
+pytest                      # set DATABASE_URL, SECRET_KEY, ADMIN_PASSWORD, GATEWAY_TOKEN for the integration tests;
+                            # the database name must end in _test, the suite refuses anything else.
+                            # MODELS_DIR=./.models adds the retrieval tests that use real embeddings (one 470 MB download)
 cd gateway && node --test
 ```
 

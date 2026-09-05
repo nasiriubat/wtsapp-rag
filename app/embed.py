@@ -3,7 +3,9 @@ from functools import cache
 from fastembed import TextEmbedding
 from fastembed.common.model_description import ModelSource, PoolingType
 
-MODEL = "intfloat/multilingual-e5-small"
+import models
+
+MODEL = models.EMBEDDING[0]
 
 # fastembed ships only the large e5 variant. The small one has an official ONNX
 # export in the same HF repo, so we register it instead of taking a different model.
@@ -14,8 +16,10 @@ TextEmbedding.add_custom_model(
 
 @cache
 def _model():
-    # Lazy so importing this module in tests does not download 120 MB.
-    return TextEmbedding(MODEL, cache_dir="/models")
+    # Lazy so importing this module in tests does not download the model.
+    return TextEmbedding(
+        MODEL, specific_model_path=models.local_path(*models.EMBEDDING), threads=models.THREADS
+    )
 
 
 def warm():

@@ -12,7 +12,7 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_DB: assistant
+          POSTGRES_DB: assistant_test
           POSTGRES_USER: assistant
           POSTGRES_PASSWORD: ci
         ports: ["5432:5432"]
@@ -20,7 +20,8 @@ jobs:
           --health-cmd "pg_isready -U assistant" --health-interval 5s
           --health-timeout 5s --health-retries 10
     env:
-      DATABASE_URL: postgresql://assistant:ci@localhost:5432/assistant
+      DATABASE_URL: postgresql://assistant:ci@localhost:5432/assistant_test
+      MODELS_DIR: ${{ github.workspace }}/.models
       SECRET_KEY: ci-secret
       ADMIN_PASSWORD: ci-admin
       GATEWAY_TOKEN: ci-token
@@ -33,6 +34,13 @@ jobs:
       - run: pip install -r app/requirements-dev.txt
       - run: ruff check app
       - run: ruff format --check app
+      # Every pin in the lock against the advisory databases.
+      - run: pip install pip-audit && pip-audit -r app/requirements.lock --require-hashes --progress-spinner off
+      # The embedding model, for the retrieval test that uses real vectors.
+      - uses: actions/cache@v4
+        with:
+          path: .models
+          key: models-${{ hashFiles('app/models.py') }}
       - run: pytest -q
 
   node:
@@ -43,6 +51,7 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci --legacy-peer-deps
+      - run: npm audit --audit-level=high
         working-directory: gateway
       - run: node --test
         working-directory: gateway
@@ -56,3 +65,14 @@ jobs:
       # A build proves the Dockerfile parses; only a run proves the image starts.
       - run: docker run --rm gateway-image node --input-type=module -e "await import('./core.js'); await import('./channels/whatsapp.js'); await import('./channels/telegram.js'); await import('./channels/discord.js')"
       - run: docker run --rm app-image python -c "import chunking, retrieval, main"
+      # Both images run without root.
+      - run: test "$(docker run --rm app-image id -u)" != 0 && test "$(docker run --rm gateway-image id -u)" != 0
+      # A bill of materials per image, kept with the run.
+      - uses: anchore/sbom-action@v0
+        with:
+          image: app-image
+          artifact-name: sbom-app.spdx.json
+      - uses: anchore/sbom-action@v0
+        with:
+          image: gateway-image
+          artifact-name: sbom-gateway.spdx.json

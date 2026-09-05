@@ -21,7 +21,7 @@ Contents: [1 Install](#1-install) · [2 Sign in](#2-sign-in) ·
 | You need | Why |
 |---|---|
 | Docker Desktop or Docker Engine with Compose v2 | Runs all three services |
-| About 3 GB of free RAM and 5 GB of disk | The embedding and reranking models run locally |
+| 4 GB of RAM and 3 GB of disk | The embedding and reranking models run locally; the app settles around 3 GB |
 | One API key from a model provider | Writes the answers. Step 3 lists where to get one |
 | A phone with WhatsApp, or a Telegram or Discord bot | The channel it listens on |
 
@@ -57,7 +57,7 @@ Then start everything:
 docker compose up -d --build
 ```
 
-The first start downloads about 2.5 GB of models, which takes a few minutes.
+The first start downloads about 1 GB of models, which takes a minute or two.
 Watch it finish with `docker compose logs -f app`, or just wait until
 `http://localhost:8000/admin` answers.
 

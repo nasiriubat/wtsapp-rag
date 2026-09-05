@@ -79,6 +79,19 @@ Migrations are numbered files under `app/migrations/`, applied once and
 recorded in `schema_migrations`. There is no down migration: restore from a
 dump to go back.
 
+**Upgrading from v1.0.** The app image no longer runs as root, and the models
+volume it created as root is not writable by the new user. Once, before the
+first start of the new image:
+
+```
+docker compose run --rm --user root --no-deps --entrypoint sh app -c "chown -R app:app /models"
+```
+
+The same applies to `gateway/auth_state/` and `gateway/data/` on a Linux
+host: `chown -R 1000:1000` them once. v1.1 also switches to a smaller
+reranker; the old model directories under the volume can be deleted
+(`models--EmbeddedLLM--*`, `models--BAAI--*`, about 3.3 GB).
+
 ## Rotate secrets
 
 - **Provider key or channel token:** paste the new one on the Providers or

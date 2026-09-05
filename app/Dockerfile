@@ -1,11 +1,14 @@
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 COPY . .
+# Nothing here needs root, and the models volume and the bind mounts should
+# not end up root-owned on the host.
+RUN adduser --system --group --home /app app && mkdir -p /models && chown -R app:app /app /models
+USER app
 # proxy-headers: behind a TLS-terminating proxy the session cookie must still
 # be marked Secure, and the login lockout must see the real client address.
 # Only the proxy's own address may set those headers: trusting "*" would let
 # any client choose the address the lockout counts against.
-CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers \
-     --forwarded-allow-ips \"${TRUSTED_PROXY:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}\""]
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips \"${TRUSTED_PROXY:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}\""]

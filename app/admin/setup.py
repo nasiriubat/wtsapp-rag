@@ -39,9 +39,8 @@ def preflight_checks():
     except psycopg.Error as e:
         checks.append(("bad", "Postgres", f"{e}. Is the db service healthy?"))
     ram_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1e9
-    checks.append(
-        ("ok" if ram_gb >= 3 else "warn", "Memory", f"{ram_gb:.1f} GB. The models need about 2 GB.")
-    )
+    memory = f"{ram_gb:.1f} GB. The app settles around 3 GB with the models loaded."
+    checks.append(("ok" if ram_gb >= 4 else "warn", "Memory", memory))
     free = health.disk_free_gb()
     checks.append(
         ("ok" if free >= 2 else "warn", "Disk", f"{free:.1f} GB free where models and the queue live.")
