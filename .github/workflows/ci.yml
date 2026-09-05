@@ -26,8 +26,8 @@ jobs:
       ADMIN_PASSWORD: ci-admin
       GATEWAY_TOKEN: ci-token
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -37,7 +37,7 @@ jobs:
       # Every pin in the lock against the advisory databases.
       - run: pip install pip-audit && pip-audit -r app/requirements.lock --require-hashes --progress-spinner off
       # The embedding model, for the retrieval test that uses real vectors.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .models
           key: models-${{ hashFiles('app/models.py') }}
@@ -49,8 +49,8 @@ jobs:
       run:
         working-directory: gateway
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - run: npm ci --legacy-peer-deps
@@ -61,7 +61,7 @@ jobs:
   images:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t app-image app
       - run: docker build -t gateway-image gateway
       # A build proves the Dockerfile parses; only a run proves the image starts.
