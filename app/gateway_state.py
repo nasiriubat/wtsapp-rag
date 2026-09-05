@@ -24,6 +24,29 @@ def _blank():
 
 
 _state = {kind: _blank() for kind in channels.KINDS}
+STARTED = time.time()
+GRACE = 90  # seconds after boot before silence from the gateway counts as absence
+
+
+def trouble():
+    """Enabled channels that are not connected, for a banner on every page.
+    None while the gateway is still expected to be starting up."""
+    if time.time() - STARTED < GRACE:
+        return []
+    out = []
+    for row in channels.list_all():
+        if not row["enabled"]:
+            continue
+        s = _state[row["kind"]]
+        if s["connected"]:
+            continue
+        why = (
+            "waiting for a QR scan"
+            if s["qr"]
+            else ("disconnected" if s["reported_at"] else "the gateway has not reported")
+        )
+        out.append((row["kind"], why))
+    return out
 
 
 def update(channel, **fields):

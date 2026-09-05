@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 import admin
 import admin_api
+import audit
 import channels
 import db
 import gateway_state
@@ -18,7 +19,22 @@ def index(request: Request):
     rows = groups.list_all()
     known = {g["external_id"] for g in rows}
     seen = [g for g in gateway_state.seen_groups() if g["id"] not in known]
-    return admin.render(request, "groups.html", groups=rows, seen=seen, channels=list(channels.KINDS))
+    by_id = {p["id"]: p for p in providers.list_all()}
+    default_id = groups.global_settings()["default_provider_id"]
+    answers_with = {
+        g["id"]: (by_id.get(g["provider_id"]), False)
+        if g["provider_id"] in by_id
+        else (by_id.get(default_id), True)
+        for g in rows
+    }
+    return admin.render(
+        request,
+        "groups.html",
+        groups=rows,
+        seen=seen,
+        channels=list(channels.KINDS),
+        answers_with=answers_with,
+    )
 
 
 @actions.post("/groups")
@@ -43,6 +59,35 @@ def threshold_stat(external_id, value):
     return f"At {value:.2f}: {pct:.0f}% of the last {n} questions would have been refused ({refused})."
 
 
+def members_of(external_id, limit=100):
+    """Who has written here, most recently first, with the numbers a purge would touch."""
+    with db.connect() as conn:
+        return conn.execute(
+            """
+            SELECT sender_jid, max(sender_name) AS name, count(*) AS messages, max(ts) AS last
+            FROM messages WHERE group_id = %s AND NOT is_bot
+            GROUP BY sender_jid ORDER BY last DESC LIMIT %s
+            """,
+            (external_id, limit),
+        ).fetchall()
+
+
+def decisions_of(external_id, limit=50):
+    """Active facts with what each replaced, newest first."""
+    with db.connect() as conn:
+        return conn.execute(
+            """
+            SELECT f.id, f.statement, f.kind, f.valid_from, f.sender_jid,
+                   (SELECT json_agg(json_build_object('statement', p.statement, 'valid_from', p.valid_from)
+                                    ORDER BY p.valid_from DESC)
+                    FROM facts p WHERE p.superseded_by = f.id) AS replaced
+            FROM facts f WHERE f.group_id = %s AND f.superseded_by IS NULL
+            ORDER BY f.valid_from DESC LIMIT %s
+            """,
+            (external_id, limit),
+        ).fetchall()
+
+
 def _edit_page(request, group, error=None, status=200):
     return admin.render(
         request,
@@ -51,6 +96,8 @@ def _edit_page(request, group, error=None, status=200):
         providers=providers.list_all(),
         default_id=groups.global_settings()["default_provider_id"],
         threshold=threshold_stat(group["external_id"], float(group["settings"]["confidence_threshold"])),
+        members=members_of(group["external_id"]),
+        decisions=decisions_of(group["external_id"]),
         error=error,
         status_code=status,
     )
@@ -188,6 +235,42 @@ def _plain(detail):
             f"{lines[i]}: {lines[i + 1].split('[')[0].strip()}" for i in range(0, len(lines) - 1, 2)
         )
     return text
+
+
+@actions.post("/groups/{group_id}/optout")
+def opt_out(group_id: int, sender: str = Form()):
+    """Erase one member and keep them erased: the same as adding them to the
+    opt-out list, from the members table."""
+    group = groups.get_by_id(group_id)
+    if group is None:
+        raise HTTPException(404)
+    sender = sender.strip()
+    already = group["settings"]["opt_out"]
+    settings = {**group["settings"], "opt_out": [*already, sender] if sender not in already else already}
+    _, purged = admin_api.apply_group(group_id, {"settings": settings})
+    counts = dict(purged).get(sender, {"messages": 0, "questions": 0, "statements": 0})
+    return admin.redirect(
+        f"/admin/groups/{group_id}",
+        f"{sender} opted out. Erased {counts['messages']} messages, {counts['questions']} questions and "
+        f"{counts['statements']} corrections; nothing they send from now on is kept.",
+    )
+
+
+@actions.post("/groups/{group_id}/facts/{fact_id}/delete")
+def delete_fact(group_id: int, fact_id: int):
+    group = groups.get_by_id(group_id)
+    if group is None:
+        raise HTTPException(404)
+    with db.connect() as conn:
+        n = conn.execute(
+            "DELETE FROM facts WHERE id = %s AND group_id = %s", (fact_id, group["external_id"])
+        ).rowcount
+    if not n:
+        raise HTTPException(404)
+    audit.log("fact.delete", group["external_id"], {"fact_id": fact_id})
+    return admin.redirect(
+        f"/admin/groups/{group_id}", "Decision removed. Anything it had replaced is active again."
+    )
 
 
 @actions.post("/groups/{group_id}/delete")

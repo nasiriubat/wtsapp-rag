@@ -64,7 +64,9 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid">
       <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
-      <label>Sender id <input name="sender" placeholder="358401234567@s.whatsapp.net" required></label>
+      <label>Sender id <small>start typing a name or number</small>
+        <input name="sender" list="senders" placeholder="358401234567@s.whatsapp.net" required>
+        <datalist id="senders">{% for m in senders %}<option value="{{ m.sender_jid }}">{{ m.name or '' }}</option>{% endfor %}</datalist></label>
     </div>
     <button class="danger">Erase</button>
   </form>

@@ -5,6 +5,7 @@ import hmac
 import os
 import secrets
 import time
+from urllib.parse import quote
 
 from fastapi import HTTPException, Request
 from itsdangerous import BadSignature, TimestampSigner
@@ -80,7 +81,14 @@ def csrf_token(request):
 
 def require_session(request: Request):
     if session_id(request) is None:
-        raise HTTPException(303, headers={"Location": "/admin/login"})
+        # Back to the page that was asked for, once signed in. Only a path on
+        # this site: a full URL here would be an open redirect.
+        wanted = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        raise HTTPException(303, headers={"Location": f"/admin/login?next={quote(wanted, safe='/?=&')}"})
+
+
+def safe_next(value):
+    return value if value.startswith("/") and not value.startswith("//") else "/admin"
 
 
 async def require_csrf(request: Request):

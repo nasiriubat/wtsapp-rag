@@ -3,6 +3,7 @@
 {% block subtitle %}<p class="sub">Every question asked, what it retrieved, and what it cost.</p>{% endblock %}
 {% block topbar_actions %}<a href="/admin/questions.jsonl" class="btn secondary">Export all as .jsonl</a>{% endblock %}
 {% block body %}
+{% if groups | selectattr('enabled') | list %}{% include "ask_box.html" %}{% endif %}
 <div class="card">
   <form method="get" action="/admin/questions" class="filters">
     <input type="hidden" name="filter" value="{{ filter }}">

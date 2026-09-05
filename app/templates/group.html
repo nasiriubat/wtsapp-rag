@@ -85,6 +85,66 @@
 </form>
 
 <div class="card">
+  <header><h3>Decisions on record</h3><span class="muted" style="font-size:12.5px">what answers cite as settled, newest first</span></header>
+  {% if decisions %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Since</th><th>Statement</th><th>Kind</th><th></th></tr></thead>
+      <tbody>
+      {% for f in decisions %}
+        <tr>
+          <td class="muted" style="white-space:nowrap">{{ f.valid_from.strftime('%d %b %Y') }}</td>
+          <td class="wrap">{{ f.statement }}
+            {% if f.replaced %}<details><summary class="muted" style="font-size:12px">replaced {{ f.replaced | length }} earlier</summary>
+              {% for r in f.replaced %}<div class="muted" style="font-size:12px">{{ r.valid_from[:10] }}: {{ r.statement }}</div>{% endfor %}</details>{% endif %}</td>
+          <td>{% if f.kind == 'correction' %}<span class="pill accent">correction{% if f.sender_jid %} by {{ f.sender_jid }}{% endif %}</span>{% else %}<span class="pill">decision</span>{% endif %}</td>
+          <td>
+            <form method="post" action="/admin/groups/{{ group.id }}/facts/{{ f.id }}/delete"
+                  data-confirm="Remove this from the record? Whatever it replaced becomes current again.">
+              <input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" style="color:var(--danger)">Remove</button></form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><strong>Nothing on record yet</strong>Decisions are extracted from the conversation as it is chunked, and members add corrections by replying "wrong, …" to an answer.</div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <header><h3>Members</h3><span class="muted" style="font-size:12.5px">everyone who has written here</span></header>
+  {% if members %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Sender id</th><th class="num">Messages</th><th>Last wrote</th><th></th></tr></thead>
+      <tbody>
+      {% for m in members %}
+        <tr>
+          <td>{{ m.name or '–' }}</td>
+          <td><code>{{ m.sender_jid }}</code></td>
+          <td class="num">{{ '{:,}'.format(m.messages) }}</td>
+          <td class="muted">{{ m.last.strftime('%d %b %Y') }}</td>
+          <td>
+            {% if m.sender_jid in s.opt_out %}<span class="pill">opted out</span>{% else %}
+            <form method="post" action="/admin/groups/{{ group.id }}/optout"
+                  data-confirm="Opt {{ m.name or m.sender_jid }} out? Their {{ m.messages }} messages, their questions and corrections are erased now, and nothing they send afterwards is kept.">
+              <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="sender" value="{{ m.sender_jid }}">
+              <button class="link" style="color:var(--danger)">Opt out and erase</button></form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><strong>Nobody has written here yet</strong></div>
+  {% endif %}
+</div>
+
+<div class="card">
   <header><h3>Danger zone</h3></header>
   <p class="card-note">Removing the group deletes it and everything it produced: messages, chunks, decisions,
     questions and the files uploaded for it alone. The audit log keeps the counts.</p>

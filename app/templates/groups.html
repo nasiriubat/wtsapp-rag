@@ -3,19 +3,19 @@
 {% block subtitle %}<p class="sub">Which conversations the assistant listens to and answers in.</p>{% endblock %}
 {% block body %}
 <div class="card">
-  <header><h3>Enabled</h3><span class="muted" style="font-size:12.5px">{{ groups | length }} group{{ 's' if groups | length != 1 }}</span></header>
+  <header><h3>Groups the assistant knows</h3><span class="muted" style="font-size:12.5px">{{ groups | length }} group{{ 's' if groups | length != 1 }}</span></header>
   {% if groups %}
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Name</th><th>Channel</th><th>Id</th><th>Triggers</th><th class="num">Threshold</th><th>Status</th></tr></thead>
+      <thead><tr><th>Name</th><th>Channel</th><th>Answers with</th><th>Triggers</th><th>Status</th></tr></thead>
       <tbody>
       {% for g in groups %}
         <tr>
           <td><a href="/admin/groups/{{ g.id }}">{{ g.name or '(unnamed)' }}</a></td>
           <td class="muted">{{ g.channel }}</td>
-          <td><code>{{ g.external_id }}</code></td>
+          {% set p, is_default = answers_with[g.id] %}
+          <td>{% if p %}{{ p.name }} · {{ p.model }}{% if is_default %} <span class="pill">default</span>{% endif %}{% else %}<span class="pill bad">none</span>{% endif %}</td>
           <td>{{ g.settings.triggers | join(', ') }}</td>
-          <td class="num">{{ g.settings.confidence_threshold }}</td>
           <td>{% if g.enabled %}<span class="pill ok">active</span>{% else %}<span class="pill">paused</span>{% endif %}</td>
         </tr>
       {% endfor %}
@@ -29,8 +29,9 @@
 
 {% if seen %}
 <div class="card">
-  <header><h3>Seen by the gateway</h3></header>
-  <p class="card-note">Your channels are in these conversations but the assistant is not logging them yet.</p>
+  <header><h3>Conversations your channels can see</h3></header>
+  <p class="card-note">The assistant is not logging these yet. Start listening and messages are stored from that moment on;
+    anything said earlier can be imported on the Data page.</p>
   {% for g in seen %}
   <form method="post" action="/admin/groups" class="grid" style="align-items:center; margin-bottom:8px">
     <input type="hidden" name="csrf" value="{{ csrf }}">

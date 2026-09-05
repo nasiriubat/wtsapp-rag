@@ -48,13 +48,34 @@ def preflight_checks():
     if gateway_state.any_reported():
         checks.append(("ok", "Gateway", "reporting"))
     else:
-        checks.append(("warn", "Gateway", "has not reported yet. Check `docker compose logs gateway`."))
+        # Without the gateway nothing past this step can work; make it a stop.
+        checks.append(
+            (
+                "bad",
+                "Gateway",
+                "has not reported yet. Run `docker compose ps` and `docker compose logs gateway`.",
+            )
+        )
     return checks
 
 
+def is_set_up():
+    """A default provider, a connected channel, an enabled group: the wizard
+    has done its job and should say so rather than start over."""
+    settings = groups.global_settings()
+    default = settings["default_provider_id"] and providers.get(settings["default_provider_id"])
+    connected = any(s["connected"] for s in gateway_state.all_channels().values())
+    enabled = [g for g in groups.list_all() if g["enabled"]]
+    return bool(default and connected and enabled), {"provider": default, "enabled": enabled}
+
+
 @admin.setup_pages.get("")
-def preflight(request: Request):
-    return _page(request, "preflight", checks=preflight_checks())
+def preflight(request: Request, checks: int = 0):
+    done, facts = is_set_up()
+    if done and not checks:
+        return _page(request, "done", provider=facts["provider"], enabled=facts["enabled"])
+    results = preflight_checks()
+    return _page(request, "preflight", checks=results, blocked=any(c[0] == "bad" for c in results))
 
 
 @pages.get("/provider", response_class=HTMLResponse)
@@ -138,8 +159,9 @@ async def enable_groups(request: Request):
 def round_trip(request: Request, created: int = 0):
     with db.connect() as conn:
         since = conn.execute("SELECT coalesce(max(id), 0) AS id FROM query_log").fetchone()["id"]
-    enabled = [g for g in groups.list_all() if g["enabled"]]
-    return _page(request, "test", since=since, groups=enabled, created=created)
+    all_groups = groups.list_all()
+    enabled = [g for g in all_groups if g["enabled"]]
+    return _page(request, "test", since=since, groups=enabled, all_groups=all_groups, created=created)
 
 
 @pages.get("/test/status", response_class=HTMLResponse)

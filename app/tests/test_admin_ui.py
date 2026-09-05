@@ -23,7 +23,7 @@ def login(browser):
 
 def test_pages_redirect_to_login_without_a_session(browser):
     res = browser.get("/admin", follow_redirects=False)
-    assert res.status_code == 303 and res.headers["location"] == "/admin/login"
+    assert res.status_code == 303 and res.headers["location"] == "/admin/login?next=/admin"
 
 
 def test_wrong_password_is_rejected(browser):

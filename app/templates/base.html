@@ -7,15 +7,16 @@
   "knowledge": "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
   "cost": "M1 4h22v16H1zM1 10h22",
   "data": "M20 5c0 1.7-3.6 3-8 3S4 6.7 4 5s3.6-3 8-3 8 1.3 8 3zM4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5",
-  "setup": "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"
+  "setup": "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
+  "audit": "M12 8v4l3 3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"
 } %}
 {% set sections = [
   ("Overview", [("/admin", "Health", "health"), ("/admin/questions", "Questions", "questions")]),
-  ("Configuration", [("/admin/groups", "Groups", "groups"), ("/admin/providers", "Providers", "providers"),
-                     ("/admin/channels", "Channels", "channels"),
-                     ("/admin/documents", "Knowledge", "knowledge")]),
-  ("Running it", [("/admin/cost", "Cost", "cost"), ("/admin/data", "Data", "data"),
-                  ("/setup", "Setup guide", "setup")])
+  ("Connect", [("/setup", "Setup guide", "setup"), ("/admin/channels", "Channels", "channels"),
+               ("/admin/providers", "Providers", "providers")]),
+  ("Configure", [("/admin/groups", "Groups", "groups"), ("/admin/documents", "Knowledge", "knowledge")]),
+  ("Operate", [("/admin/cost", "Cost", "cost"), ("/admin/data", "Data", "data"),
+               ("/admin/audit", "Audit log", "audit")])
 ] %}
 <!doctype html>
 <html lang="en">
@@ -65,6 +66,9 @@
       {% block topbar_actions %}{% endblock %}
     </header>
     <main class="content">
+      {% if trouble %}<div class="notice bad" role="alert">
+        {% for kind, why in trouble %}<strong>{{ kind }}</strong> is enabled but {{ why }}{% if not loop.last %}; {% endif %}{% endfor %}.
+        <a href="/admin/channels">Channels</a>{% if trouble | selectattr(1, 'equalto', 'waiting for a QR scan') | list %} · <a href="/setup/link">Scan the code</a>{% endif %}</div>{% endif %}
       {% if flash %}<div class="notice {{ flash.kind }}" role="status">{{ flash.text }}</div>{% endif %}
       {% block body %}{% endblock %}
     </main>

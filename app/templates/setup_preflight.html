@@ -22,5 +22,10 @@
     </table>
   </div>
 </div>
+{% if blocked %}
+<div class="notice bad" role="alert">Fix the failed line first: nothing past this step can work without it.
+  <a href="/setup?checks=1">Check again</a>.</div>
+{% else %}
 <div class="actions"><a href="/setup/provider" class="btn">Next: choose a model</a></div>
+{% endif %}
 {% endblock %}

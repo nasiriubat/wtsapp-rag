@@ -1,0 +1,26 @@
+{% extends "setup_base.html" %}
+{% set step = 'test' %}
+{% block step %}
+<div class="notice ok" role="status">You're set up.</div>
+<div class="card">
+  <header><h3>What is in place</h3></header>
+  <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td style="width:1%"><span class="pill ok">ok</span></td><td><strong>Model</strong></td>
+            <td class="muted">{{ provider.name }} · {{ provider.model }} answers by default. <a href="/admin/providers">Providers</a></td></tr>
+        <tr><td><span class="pill ok">ok</span></td><td><strong>Channel</strong></td>
+            <td class="muted">Connected. <a href="/admin/channels">Channels</a></td></tr>
+        <tr><td><span class="pill ok">ok</span></td><td><strong>Groups</strong></td>
+            <td class="muted">{{ enabled | length }} enabled: {% for g in enabled %}{{ g.name or g.external_id }}{% if not loop.last %}, {% endif %}{% endfor %}. <a href="/admin/groups">Groups</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="actions">
+  <a href="/admin/questions" class="btn">Ask it something</a>
+  <a href="/admin/data" class="btn secondary">Import older history</a>
+  <a href="/admin/documents" class="btn secondary">Add files</a>
+  <a href="/setup?checks=1" class="btn outline">Run the checks again</a>
+</div>
+{% endblock %}

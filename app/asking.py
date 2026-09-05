@@ -3,7 +3,9 @@ main.py owns the HTTP shape; this owns what happens to a question."""
 
 import re
 import time
+import uuid
 from collections import deque
+from types import SimpleNamespace
 
 import answer
 import budget
@@ -199,7 +201,25 @@ def _answer_in(conn, q, group, cite_group, found):
         "confidence": confidence,
         "timings": timings,
         "source_msg_id": source_id,
+        "chunks": chunks,
     }
+
+
+PANEL_SENDER = "admin:panel"
+
+
+def ask_from_panel(group, question):
+    """The admin asking from the browser: the same path a member's question
+    takes, logged like one, but never throttled and never sent anywhere."""
+    q = SimpleNamespace(
+        question=question,
+        group_id=group["external_id"],
+        sender_jid=PANEL_SENDER,
+        sender_name="admin",
+        wa_msg_id=f"panel:{uuid.uuid4()}",
+        quoted_msg_id=None,
+    )
+    return answer_in(q, group)
 
 
 def answer_privately(q):

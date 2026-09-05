@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block subtitle %}<p class="sub">Every change made in the panel or through the API, with what changed. Secrets are masked.</p>{% endblock %}
+{% block topbar_actions %}<a href="/api/audit" class="btn secondary">JSON</a>{% endblock %}
+{% block body %}
+<div class="card">
+  <form method="get" action="/admin/audit" class="filters">
+    <label>Action
+      <select name="action">
+        <option value="">Every action</option>
+        {% for a in actions_seen %}<option value="{{ a }}" {% if a == action %}selected{% endif %}>{{ a }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="secondary">Filter</button>
+  </form>
+</div>
+<div class="card">
+  <header><h3>{{ 'Page ' ~ page if page > 1 else 'Latest' }}</h3></header>
+  {% if rows %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="muted" style="white-space:nowrap">{{ r.ts.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ r.actor }}</td>
+          <td><code>{{ r.action }}</code></td>
+          <td class="wrap">{{ r.target or '' }}</td>
+          <td class="wrap"><code style="font-size:11.5px">{{ r.detail | tojson if r.detail else '' }}</code></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><strong>Nothing recorded</strong>Changes made in the panel appear here.</div>
+  {% endif %}
+</div>
+<div class="pager">
+  {% if page > 1 %}<a href="/admin/audit?action={{ action | urlencode }}&page={{ page - 1 }}" class="btn secondary">Newer</a>{% endif %}
+  {% if more %}<a href="/admin/audit?action={{ action | urlencode }}&page={{ page + 1 }}" class="btn secondary">Older</a>{% endif %}
+</div>
+{% endblock %}

@@ -29,6 +29,10 @@ def page(request: Request):
             r["group_id"]: r["n"]
             for r in conn.execute("SELECT group_id, count(*) AS n FROM query_log GROUP BY group_id")
         }
+        senders = conn.execute(
+            "SELECT DISTINCT sender_jid, max(sender_name) AS name FROM messages WHERE NOT is_bot "
+            "GROUP BY sender_jid ORDER BY sender_jid LIMIT 500"
+        ).fetchall()
     return admin.render(
         request,
         "data.html",
@@ -36,6 +40,7 @@ def page(request: Request):
         counts=counts,
         questions=questions,
         total_questions=sum(questions.values()),
+        senders=senders,
     )
 
 

@@ -14,6 +14,7 @@
       <span><strong>Group assistant</strong><small>Admin</small></span>
     </div>
     <form method="post" action="/admin/login">
+      <input type="hidden" name="next" value="{{ next }}">
       <label>Admin password
         <input type="password" name="password" autofocus required autocomplete="current-password">
       </label>

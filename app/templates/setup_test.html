@@ -2,18 +2,23 @@
 {% block step %}
 {% if created %}<div class="notice ok">Enabled {{ created }} group{{ 's' if created != 1 }}. The gateway picks
   them up within 30 seconds.</div>{% endif %}
+{% if groups %}
+{% with groups=all_groups %}{% include "ask_box.html" %}{% endwith %}
 <div class="card">
-  <header><h3>Say hello</h3></header>
-  {% if groups %}
+  <header><h3>Or say hello from the phone</h3></header>
   <p class="card-note">In <strong>{{ groups[0].name or groups[0].external_id }}</strong>, send:</p>
   <pre>{{ groups[0].settings.triggers[0] }} hello</pre>
   <p class="card-note">Expect “I don't have anything on that” at first: the assistant only knows what was said
     after it joined, and hello is not a question it can answer from the chat. That reply still proves the whole
     path works. Then ask about something the group has discussed since, or import the history on the
     <a href="/admin/data">Data page</a>.</p>
-  <div hx-get="/setup/test/status?since={{ since }}" hx-trigger="load, every 3s" hx-swap="innerHTML"></div>
-  {% else %}
-  <div class="empty"><strong>No groups enabled</strong><a href="/setup/groups">Pick one first</a>.</div>
-  {% endif %}
+  <div hx-get="/setup/test/status?since={{ since }}" hx-trigger="load, every 3s" hx-swap="innerHTML" aria-live="polite"></div>
+  <p class="muted" style="font-size:12.5px; margin-top:10px">Nothing arriving? The Health page shows whether the
+    channel is connected and the group is active. Or <a href="/admin">skip this and test later</a>.</p>
 </div>
+{% else %}
+<div class="card">
+  <div class="empty"><strong>No groups enabled</strong><a href="/setup/groups">Pick one first</a>.</div>
+</div>
+{% endif %}
 {% endblock %}

@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 
+import gateway_state
 from admin import auth
 
 FLASH = "flash"
@@ -43,8 +44,13 @@ def take_flash(request):
 
 def render(request, name, status_code=200, **ctx):
     flash = take_flash(request)
+    # The wizard's own pages explain a missing link themselves.
+    trouble = [] if request.url.path.startswith("/setup") else gateway_state.trouble()
     response = templates.TemplateResponse(
-        request, name, {"csrf": auth.csrf_token(request), "flash": flash, **ctx}, status_code=status_code
+        request,
+        name,
+        {"csrf": auth.csrf_token(request), "flash": flash, "trouble": trouble, **ctx},
+        status_code=status_code,
     )
     if flash is not None:
         response.delete_cookie(FLASH)
@@ -83,17 +89,17 @@ def error_response(request, status, detail):
 
 
 @public.get("/login", response_class=HTMLResponse)
-def login_page(request: Request):
-    return templates.TemplateResponse(request, "login.html", {"error": None})
+def login_page(request: Request, next: str = "/admin"):
+    return templates.TemplateResponse(request, "login.html", {"error": None, "next": auth.safe_next(next)})
 
 
 @public.post("/login")
-def login(request: Request, password: str = Form()):
+def login(request: Request, password: str = Form(), next: str = Form("/admin")):
     if not auth.check_password(password, request.client.host if request.client else "?"):
         return templates.TemplateResponse(
-            request, "login.html", {"error": "Wrong password."}, status_code=401
+            request, "login.html", {"error": "Wrong password.", "next": auth.safe_next(next)}, status_code=401
         )
-    res = RedirectResponse("/admin", status_code=303)
+    res = RedirectResponse(auth.safe_next(next), status_code=303)
     res.set_cookie(
         auth.COOKIE,
         auth.new_session(),
@@ -116,6 +122,7 @@ def logout():
 # setup register their index pages on the prefixed routers directly.
 from admin import (  # noqa: E402
     health,  # noqa: F401
+    pages_audit,
     pages_channels,
     pages_cost,
     pages_data,
@@ -136,6 +143,7 @@ for module in (
     pages_data,
     pages_documents,
     pages_channels,
+    pages_audit,
 ):
     router.include_router(module.pages)
     forms.include_router(module.actions)

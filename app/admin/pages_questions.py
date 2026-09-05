@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 import admin
+import asking
 import audit
 import db
 import groups
@@ -87,6 +88,20 @@ def feedback(request: Request, question_id: int, value: int = Form(), note: str 
         retrieved=retrieved,
         saved={1: "good", -1: "wrong"}.get(value),
     )
+
+
+@actions.post("/questions/ask", response_class=HTMLResponse)
+def ask(request: Request, group_id: int = Form(), question: str = Form()):
+    """Ask the assistant from the panel and see what it retrieved. One real
+    provider call; the answer is logged like any other question."""
+    group = groups.get_by_id(group_id)
+    if group is None:
+        raise HTTPException(404)
+    question = question.strip()
+    if not question:
+        return admin.error_response(request, 422, "type a question first")
+    result = asking.ask_from_panel(group, question)
+    return admin.render(request, "ask_result.html", result=result, group=group, question=question)
 
 
 @actions.post("/questions/{question_id}/delete")

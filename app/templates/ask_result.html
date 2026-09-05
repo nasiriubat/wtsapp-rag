@@ -1,0 +1,31 @@
+<div class="card" aria-live="polite">
+  <header><h3>{{ group.name or group.external_id }} was asked</h3>
+    <span class="pill {{ 'ok' if result.outcome in ('answered', 'dm') else ('warn' if result.outcome == 'refused' else 'bad') }}">{{ result.outcome }}</span></header>
+  <p><strong>{{ question }}</strong></p>
+  <p style="white-space:pre-wrap">{{ result.answer }}</p>
+  <p class="muted" style="font-size:12.5px">
+    confidence {{ '%.3f' % result.confidence }} ·
+    {% for k, v in result.timings.items() %}{{ k | replace('_ms', '') }} {{ v }} ms{% if not loop.last %}, {% endif %}{% endfor %}
+    · logged on the Questions page as asked by the panel
+  </p>
+  {% if result.chunks %}
+  <details open>
+    <summary>Retrieved {{ result.chunks | length }} chunk{{ 's' if result.chunks | length != 1 }}</summary>
+    <table>
+      <thead><tr><th class="num">Score</th><th>Found by</th><th>Excerpt</th></tr></thead>
+      <tbody>
+      {% for c in result.chunks %}
+        <tr>
+          <td class="num">{{ '%.3f' % c.score }}</td>
+          <td><span class="pill">{{ c.source }}</span></td>
+          <td class="wrap"><span class="muted" style="font-size:12px">{{ c.source_label or (c.start_ts.strftime('%d %b %Y') if c.start_ts else '') }}</span><br>{{ c.content[:600] }}{{ '…' if c.content | length > 600 }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% else %}
+  <p class="notice info">Nothing was retrieved: the group has no chunks yet, or none matched. Import the history or
+    wait for a conversation to be chunked.</p>
+  {% endif %}
+</div>

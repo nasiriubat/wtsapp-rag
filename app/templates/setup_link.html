@@ -10,9 +10,13 @@
   </div>
 </div>
 <div class="card">
-  <header><h3>Other channels</h3></header>
-  <p class="card-note">Telegram, Discord and the WhatsApp Cloud API take a token instead of a QR code. Set them
-    up on the <a href="/admin/channels">Channels page</a>, then come back to pick groups.</p>
+  <header><h3>Using Telegram or Discord instead?</h3></header>
+  <p class="card-note">They take a token instead of a QR code. Paste it on the
+    <a href="/admin/channels">Channels page</a>, have somebody write in the group, then pick it here.</p>
+  <div class="actions"><a href="/setup/groups" class="btn secondary">I'm not using WhatsApp: pick groups</a></div>
+</div>
+<div class="card">
+  <header><h3>Already linked the wrong number?</h3></header>
   <form method="post" action="/admin/channels/whatsapp/relink"
         data-confirm="Unlink this number and show a new QR code? Nothing stored is touched.">
     <input type="hidden" name="csrf" value="{{ csrf }}">
