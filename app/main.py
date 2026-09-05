@@ -29,6 +29,7 @@ import migrate
 import observe
 import retention
 import retrieval
+from version import VERSION
 
 log = logging.getLogger("app")
 
@@ -157,7 +158,7 @@ def health(response: Response, authorization: str = Header(default="")):
     stalled = stalled_loops()
     if stalled:
         response.status_code = 503
-    out = {"db": "ok", "loops": "ok" if not stalled else "stalled"}
+    out = {"db": "ok", "loops": "ok" if not stalled else "stalled", "version": VERSION}
     if gateway_api.token_ok(authorization):
         out.update(
             stalled_loops=stalled, last_chunk_ts=last["end_ts"] if last else None, unchunked_messages=pending

@@ -25,7 +25,10 @@ Any LLM provider. Local embeddings and reranker.
 - `.env` holds only what must exist before the database does:
   `POSTGRES_PASSWORD`, `SECRET_KEY`, `ADMIN_PASSWORD` (first login). Everything
   the admin owns lives in Postgres.
-- Admin UI is server-rendered Jinja2 + htmx, vendored. No build step.
+- Admin UI is server-rendered Jinja2 + htmx, vendored. No build step. No
+  inline script in a template: behaviour lives in `app/static/app.js` on data
+  attributes, and the panel ships a Content Security Policy that says so.
+  Results of an action travel in a signed one-shot flash, never the URL.
 
 ## Hard constraints
 

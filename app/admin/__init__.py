@@ -11,6 +11,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 
 import gateway_state
 from admin import auth
+from version import VERSION
 
 FLASH = "flash"
 
@@ -49,7 +50,7 @@ def render(request, name, status_code=200, **ctx):
     response = templates.TemplateResponse(
         request,
         name,
-        {"csrf": auth.csrf_token(request), "flash": flash, "trouble": trouble, **ctx},
+        {"csrf": auth.csrf_token(request), "flash": flash, "trouble": trouble, "version": VERSION, **ctx},
         status_code=status_code,
     )
     if flash is not None:
@@ -80,6 +81,8 @@ def error_response(request, status, detail):
         {
             "csrf": auth.csrf_token(request),
             "flash": None,
+            "trouble": [],
+            "version": VERSION,
             "status": status,
             "detail": detail,
             "back": request.headers.get("referer") or "/admin",
@@ -90,14 +93,19 @@ def error_response(request, status, detail):
 
 @public.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, next: str = "/admin"):
-    return templates.TemplateResponse(request, "login.html", {"error": None, "next": auth.safe_next(next)})
+    return templates.TemplateResponse(
+        request, "login.html", {"error": None, "next": auth.safe_next(next), "version": VERSION}
+    )
 
 
 @public.post("/login")
 def login(request: Request, password: str = Form(), next: str = Form("/admin")):
     if not auth.check_password(password, request.client.host if request.client else "?"):
         return templates.TemplateResponse(
-            request, "login.html", {"error": "Wrong password.", "next": auth.safe_next(next)}, status_code=401
+            request,
+            "login.html",
+            {"error": "Wrong password.", "next": auth.safe_next(next), "version": VERSION},
+            status_code=401,
         )
     res = RedirectResponse(auth.safe_next(next), status_code=303)
     res.set_cookie(

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · Group assistant</title>
+  <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -11,7 +12,7 @@
   <div class="card">
     <div class="brand">
       <span class="mark">GA</span>
-      <span><strong>Group assistant</strong><small>Admin</small></span>
+      <span><strong>Group assistant</strong><small>v{{ version }}</small></span>
     </div>
     <form method="post" action="/admin/login">
       <input type="hidden" name="next" value="{{ next }}">

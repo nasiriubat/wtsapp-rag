@@ -100,7 +100,7 @@ def test_audit_redaction_reaches_nested_secrets():
 @needs_db
 def test_health_shows_only_up_or_down_without_the_token(client):
     plain = client.get("/health").json()
-    assert set(plain) == {"db", "loops"}
+    assert set(plain) == {"db", "loops", "version"}
     detailed = client.get("/health", headers=GW).json()
     assert "unchunked_messages" in detailed and "stalled_loops" in detailed
 

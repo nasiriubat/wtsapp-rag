@@ -24,6 +24,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Admin{% endblock %} · Group assistant</title>
+  <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js"></script>
   <script src="/static/app.js" defer></script>
@@ -33,15 +34,17 @@
   <aside class="sidebar">
     <div class="brand">
       <span class="mark">GA</span>
-      <span><strong>Group assistant</strong><small>v1.0</small></span>
+      <span><strong>Group assistant</strong><small>v{{ version }}</small></span>
     </div>
+    <input type="checkbox" id="menu" class="menu-toggle" hidden>
+    <label for="menu" class="menu-button" aria-label="Menu">Menu</label>
     <nav class="nav">
       {% for label, items in sections %}
       <span class="label">{{ label }}</span>
       {% for href, name, icon in items %}
       {% set active = request.url.path == href or (href not in ("/admin", "/setup") and request.url.path.startswith(href)) or (href == "/setup" and request.url.path.startswith("/setup")) %}
       <a href="{{ href }}" class="{{ 'active' if active }}">
-        <svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        <svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ icons[icon] }}"/></svg>
         {{ name }}
       </a>
