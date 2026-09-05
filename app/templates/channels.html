@@ -2,8 +2,6 @@
 {% block title %}Channels{% endblock %}
 {% block subtitle %}<p class="sub">Where the assistant listens. Secrets are encrypted and never shown again.</p>{% endblock %}
 {% block body %}
-{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
-
 {% for c in view %}
 <div class="card">
   <header>
@@ -18,7 +16,8 @@
     <label>{{ label }} {% if c.row and c.row.configured %}<small>stored; leave empty to keep it</small>{% endif %}
       <input name="{{ name }}" type="password" autocomplete="new-password" {% if not (c.row and c.row.configured) %}required{% endif %}></label>
     {% endfor %}
-    <label><input type="checkbox" name="enabled" value="true" {% if not c.row or c.row.enabled %}checked{% endif %}> Enabled</label>
+    <label><input type="checkbox" name="enabled" value="true" {% if not c.row or c.row.enabled %}checked{% endif %}
+                  data-confirm-off="Disable {{ c.title }}? The gateway disconnects it within 30 seconds."> Enabled</label>
     <div class="actions">
       <button>Save</button>
       {% if c.setup_url %}<a class="btn secondary" href="{{ c.setup_url }}" target="_blank" rel="noopener">Open the console ↗</a>{% endif %}
@@ -27,12 +26,12 @@
   <div class="actions" style="margin-top:14px">
     {% if c.traits.pairs and c.row and c.row.enabled %}
     <form method="post" action="/admin/channels/{{ c.kind }}/relink"
-          onsubmit="return confirm('Unlink this number and show a new QR code?')">
+          data-confirm="Unlink this number and show a new QR code? Nothing stored is touched.">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">Link a different number</button></form>
     {% endif %}
     {% if c.fields and c.row %}
     <form method="post" action="/admin/channels/{{ c.kind }}/delete"
-          onsubmit="return confirm('Remove the {{ c.title }} channel?')">
+          data-confirm="Remove the {{ c.title }} channel? Its token is deleted; its groups stay until you delete them.">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Remove</button></form>
     {% endif %}
   </div>

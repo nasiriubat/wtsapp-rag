@@ -1,14 +1,17 @@
 """Server-rendered admin panel. Pages live in one module each under admin/."""
 
 import html
+import os
 import pathlib
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from itsdangerous import BadSignature, URLSafeSerializer
 
 from admin import auth
+
+FLASH = "flash"
 
 templates = Jinja2Templates(directory=str(pathlib.Path(__file__).resolve().parent.parent / "templates"))
 escape = html.escape
@@ -22,13 +25,61 @@ setup_forms = APIRouter(
 )
 
 
-def render(request, name, **ctx):
-    return templates.TemplateResponse(request, name, {"csrf": auth.csrf_token(request), **ctx})
+def _flash_signer():
+    return URLSafeSerializer(os.environ["SECRET_KEY"], salt="flash")
 
 
-def redirect(path, message):
-    """Post-redirect-get with a one-line flash carried in the query string."""
-    return RedirectResponse(f"{path}?{urlencode({'message': message})}", status_code=303)
+def take_flash(request):
+    """The one-line result of the last action, or None. Signed, so a crafted
+    link cannot put words in the panel's mouth, and read once."""
+    raw = request.cookies.get(FLASH)
+    if not raw:
+        return None
+    try:
+        return _flash_signer().loads(raw)
+    except BadSignature:
+        return None
+
+
+def render(request, name, status_code=200, **ctx):
+    flash = take_flash(request)
+    response = templates.TemplateResponse(
+        request, name, {"csrf": auth.csrf_token(request), "flash": flash, **ctx}, status_code=status_code
+    )
+    if flash is not None:
+        response.delete_cookie(FLASH)
+    return response
+
+
+def redirect(path, message, kind="ok"):
+    """Post-redirect-get with the result shown once on the next page."""
+    response = RedirectResponse(path, status_code=303)
+    response.set_cookie(
+        FLASH,
+        _flash_signer().dumps({"kind": kind, "text": message}),
+        max_age=60,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+def error_response(request, status, detail):
+    """A form that failed, as a page a person can read, with the way back."""
+    if request.headers.get("hx-request"):
+        return HTMLResponse(f'<div class="notice bad" role="alert">{html.escape(str(detail))}</div>', status)
+    return templates.TemplateResponse(
+        request,
+        "error.html",
+        {
+            "csrf": auth.csrf_token(request),
+            "flash": None,
+            "status": status,
+            "detail": detail,
+            "back": request.headers.get("referer") or "/admin",
+        },
+        status_code=status,
+    )
 
 
 @public.get("/login", response_class=HTMLResponse)

@@ -1,11 +1,12 @@
 import json
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 
 import admin
 import admin_api
 import audit
+import db
 import groups
 import providers
 
@@ -31,14 +32,27 @@ def _options(raw):
 
 
 @pages.get("/providers", response_class=HTMLResponse)
-def page(request: Request, message: str | None = None):
+def page(request: Request):
+    with db.connect() as conn:
+        answered = {
+            r["provider_id"]: r["n"]
+            for r in conn.execute(
+                "SELECT provider_id, count(*) AS n FROM query_log "
+                "WHERE provider_id IS NOT NULL GROUP BY provider_id"
+            )
+        }
+    used_by = {}
+    for g in groups.list_all():
+        if g["provider_id"] is not None:
+            used_by[g["provider_id"]] = used_by.get(g["provider_id"], 0) + 1
     return admin.render(
         request,
         "providers.html",
         providers=providers.list_all(),
         default_id=groups.global_settings()["default_provider_id"],
         kinds={k: KIND_HELP.get(k, "") for k in providers.KINDS},
-        message=message,
+        answered=answered,
+        used_by=used_by,
     )
 
 
@@ -63,8 +77,8 @@ def create(
         "price_out": price_out,
         "options": _options(options),
     }
-    admin_api.add_provider(fields)
-    return RedirectResponse("/admin/providers", status_code=303)
+    row = admin_api.add_provider(fields)
+    return admin.redirect("/admin/providers", f"Added {row['name']}. Press Test to make one real call.")
 
 
 # Before the /providers/{provider_id} routes, or "models" is parsed as an id.
@@ -122,13 +136,14 @@ def update(
     if api_key:
         fields["api_key"] = api_key
     admin_api.apply_provider(provider_id, fields)
-    return RedirectResponse("/admin/providers", status_code=303)
+    return admin.redirect("/admin/providers", f"Saved {name}.")
 
 
 @actions.post("/providers/{provider_id}/delete")
 def delete(provider_id: int):
+    row = providers.get(provider_id)
     admin_api.remove_provider(provider_id)
-    return RedirectResponse("/admin/providers", status_code=303)
+    return admin.redirect("/admin/providers", f"Deleted {row['name'] if row else 'the provider'}.")
 
 
 @actions.post("/providers/{provider_id}/default")
@@ -137,7 +152,10 @@ def make_default(provider_id: int):
         raise HTTPException(404)
     groups.set_global(default_provider_id=provider_id)
     audit.log("settings.update", "global", {"default_provider_id": provider_id})
-    return RedirectResponse("/admin/providers", status_code=303)
+    row = providers.get(provider_id)
+    return admin.redirect(
+        "/admin/providers", f"{row['name']} now answers in every group without its own choice."
+    )
 
 
 @actions.post("/providers/{provider_id}/test", response_class=HTMLResponse)

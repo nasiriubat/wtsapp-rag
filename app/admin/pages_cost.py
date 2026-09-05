@@ -1,5 +1,8 @@
+from calendar import monthrange
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
 import admin
@@ -41,6 +44,9 @@ def page(request: Request):
         ).fetchall()
     total = sum(r["cost"] for r in by_provider)
     peak = max((r["cost"] for r in by_day), default=0) or 1
+    today = datetime.now(UTC)
+    days_in_month = monthrange(today.year, today.month)[1]
+    projected = float(total) / today.day * days_in_month if total else 0.0
     return admin.render(
         request,
         "cost.html",
@@ -49,6 +55,7 @@ def page(request: Request):
         by_day=by_day,
         total=total,
         peak=peak,
+        projected=projected,
         cap=groups.global_settings()["monthly_cap_eur"],
     )
 
@@ -61,4 +68,9 @@ def set_cap(monthly_cap_eur: str = Form("")):
     except (ValueError, ValidationError) as e:
         raise HTTPException(422, f"monthly cap: {e}") from e
     audit.log("settings.update", "global", {"monthly_cap_eur": value})
-    return RedirectResponse("/admin/cost", status_code=303)
+    note = (
+        f"Global cap set to €{value:g} a month."
+        if value is not None
+        else "Global cap removed; only per-group caps apply."
+    )
+    return admin.redirect("/admin/cost", note)

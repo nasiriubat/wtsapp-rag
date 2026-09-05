@@ -16,7 +16,7 @@ actions = APIRouter()
 
 
 @pages.get("/data", response_class=HTMLResponse)
-def page(request: Request, message: str | None = None):
+def page(request: Request):
     with db.connect() as conn:
         counts = {
             r["group_id"]: r
@@ -36,7 +36,6 @@ def page(request: Request, message: str | None = None):
         counts=counts,
         questions=questions,
         total_questions=sum(questions.values()),
-        message=message,
     )
 
 
@@ -50,10 +49,20 @@ async def import_export(group_id: int = Form(), file: UploadFile = None):
     if group is None or file is None:
         raise HTTPException(422, "pick a group and a file")
     # Same decoding as the CLI path, so the same line hashes to the same id.
-    text = (await file.read()).decode("utf-8")
-    n = insert(group["external_id"], parse(io.StringIO(text)))
+    try:
+        text = (await file.read()).decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(422, "that file is not a text export; use Export chat → Without media") from None
+    rows = list(parse(io.StringIO(text)))
+    if not rows:
+        raise HTTPException(422, "no messages were recognised in that file; is it a WhatsApp chat export?")
+    n = insert(group["external_id"], rows)
+    first, last = min(r["ts"] for r in rows), max(r["ts"] for r in rows)
     audit.log("data.import", group["external_id"], {"file": file.filename, "messages": n})
-    return _redirect(f"Imported {n} new messages into {group['name'] or 'the group'}")
+    return _redirect(
+        f"Imported {n} new of {len(rows)} messages, {first:%d %b %Y} to {last:%d %b %Y}, "
+        f"into {group['name'] or 'the group'}. Chunks build within a minute."
+    )
 
 
 @actions.post("/data/reembed/{group_id}")
@@ -79,7 +88,7 @@ def delete_messages(group_id: int):
         raise HTTPException(404)
     n = retention.purge_group_messages(group["external_id"])
     audit.log("data.purge_group", group["external_id"], {"messages": n})
-    return _redirect(f"Deleted {n} messages from {group['name'] or 'the group'}")
+    return _redirect(f"Deleted {n} messages, their chunks and decisions from {group['name'] or 'the group'}")
 
 
 @actions.post("/data/questions/clear")

@@ -25,6 +25,7 @@
   <title>{% block title %}Admin{% endblock %} · Group assistant</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js"></script>
+  <script src="/static/app.js" defer></script>
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf }}"}'>
 <div class="shell">
@@ -64,6 +65,7 @@
       {% block topbar_actions %}{% endblock %}
     </header>
     <main class="content">
+      {% if flash %}<div class="notice {{ flash.kind }}" role="status">{{ flash.text }}</div>{% endif %}
       {% block body %}{% endblock %}
     </main>
   </div>

@@ -1,5 +1,6 @@
 import os
 import shutil
+from datetime import UTC, datetime
 
 import psycopg
 from fastapi import Request
@@ -9,6 +10,7 @@ import budget
 import db
 import gateway_state
 import groups
+import providers
 
 
 def stats():
@@ -54,6 +56,9 @@ def page(request: Request):
         stats=s,
         channels=gateway_state.all_channels(),
         groups=groups.list_all(),
+        providers=providers.list_all(),
+        default_id=groups.global_settings()["default_provider_id"],
         cap=groups.global_settings()["monthly_cap_eur"],
         disk_free_gb=disk_free_gb(),
+        now=datetime.now(UTC),
     )

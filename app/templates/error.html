@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong{% endblock %}
+{% block subtitle %}<p class="sub">The last action was not applied.</p>{% endblock %}
+{% block body %}
+<div class="card">
+  <header><h3>{{ status }}</h3></header>
+  <div class="notice bad" role="alert">{{ detail }}</div>
+  <p class="card-note" style="margin-top:14px">Go back and the form is as you left it.</p>
+  <div class="actions"><a href="{{ back }}" class="btn">Go back</a><a href="/admin" class="btn secondary">Health</a></div>
+</div>
+{% endblock %}

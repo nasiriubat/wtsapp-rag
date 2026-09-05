@@ -296,3 +296,25 @@ button.link {
 }
 button.link:hover { background: none; text-decoration: underline; }
 select.picker { width: auto; max-width: 100%; padding: 5px 26px 5px 9px; font-size: 12.5px; }
+
+/* ---------- in flight ---------- */
+
+/* htmx marks the element that fired a request; a button shows a spinner and
+   refuses a second click until the answer is back. */
+.htmx-request, .htmx-request * { pointer-events: none; }
+button.htmx-request { opacity: 0.7; position: relative; color: transparent; }
+button.htmx-request::after {
+  content: ""; position: absolute; width: 14px; height: 14px; left: calc(50% - 7px); top: calc(50% - 7px);
+  border: 2px solid currentColor; border-color: rgba(255, 255, 255, 0.9) transparent rgba(255, 255, 255, 0.9) transparent;
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+button.secondary.htmx-request::after, button.link.htmx-request::after {
+  border-color: var(--accent) transparent var(--accent) transparent;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { button.htmx-request::after { animation: none; } }
+input.filled { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(14, 98, 69, 0.15); }
+.notice[role="alert"] { font-weight: 500; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.filters label { margin: 0; min-width: 160px; }
+.pager { display: flex; gap: 10px; align-items: center; margin-top: 12px; }

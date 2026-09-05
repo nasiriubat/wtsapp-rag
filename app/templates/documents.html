@@ -2,8 +2,6 @@
 {% block title %}Knowledge{% endblock %}
 {% block subtitle %}<p class="sub">Files the assistant can answer from, alongside the chat itself.</p>{% endblock %}
 {% block body %}
-{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
-
 <div class="card">
   <header><h3>Upload</h3></header>
   <p class="card-note">Text, Markdown, PDF, Word, Excel, PowerPoint, CSV, HTML and images, up to {{ max_mb }} MB each.

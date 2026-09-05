@@ -1,4 +1,4 @@
-<select class="picker" onchange="document.getElementById('{{ target }}').value = this.value">
+<select class="picker" data-fill="{{ target }}" aria-label="Models this key can use">
   <option value="">{{ names | length }} models — pick one</option>
   {% for name in names %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
 </select>

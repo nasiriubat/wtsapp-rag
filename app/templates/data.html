@@ -2,8 +2,6 @@
 {% block title %}Data{% endblock %}
 {% block subtitle %}<p class="sub">Import history, rebuild the index, erase what you no longer want kept.</p>{% endblock %}
 {% block body %}
-{% if message %}<div class="notice ok">{{ message }}</div>{% endif %}
-
 <div class="card">
   <header><h3>What is stored</h3></header>
   <div class="table-wrap">
@@ -12,7 +10,7 @@
       <tbody>
       {% for g in groups %}{% set c = counts.get(g.external_id) %}
         <tr>
-          <td>{{ g.name or g.external_id }}</td>
+          <td><a href="/admin/groups/{{ g.id }}">{{ g.name or g.external_id }}</a></td>
           <td class="num">{{ '{:,}'.format(c.messages) if c else 0 }}</td>
           <td class="num">{{ '{:,}'.format(questions.get(g.external_id, 0)) }}</td>
           <td class="muted">{{ c.first.strftime('%d %b %Y') if c else '–' }}</td>
@@ -20,12 +18,12 @@
           <td>
             <div class="actions">
               <a class="btn secondary" href="/admin/data/export/{{ g.id }}.jsonl">Export</a>
-              <form method="post" action="/admin/data/reembed/{{ g.id }}"
-                    onsubmit="return confirm('Rebuild every chunk for this group? Answers keep working meanwhile.')">
+              <form method="post" action="/admin/data/reembed/{{ g.id }}">
                 <input type="hidden" name="csrf" value="{{ csrf }}"><button class="outline">Re-index</button>
               </form>
               <form method="post" action="/admin/data/messages/{{ g.id }}/delete"
-                    onsubmit="return confirm('Delete every message this group has ever sent? Uploaded files are kept. This cannot be undone.')">
+                    data-confirm-typed="{{ g.name or g.external_id }}"
+                    data-confirm="This deletes every message, chunk and decision of {{ g.name or g.external_id }}. Uploaded files stay. It cannot be undone. Type the group's name to confirm:">
                 <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Delete chats</button>
               </form>
             </div>
@@ -35,6 +33,8 @@
       </tbody>
     </table>
   </div>
+  <p class="card-note" style="margin-top:14px">Re-index rebuilds a group's chunks from its messages in the background; answers keep working
+    meanwhile. Use it after changing how chunks are built.</p>
 </div>
 
 <div class="card">
@@ -44,7 +44,8 @@
     <code>.txt</code> here. Re-uploading the same file is safe; duplicates are skipped. Answers drawn from
     imported messages carry a text citation instead of a quote-reply, because the channel cannot quote a
     message it never saw.</p>
-  <form method="post" action="/admin/data/import" enctype="multipart/form-data">
+  <form method="post" action="/admin/data/import" enctype="multipart/form-data"
+        data-confirm="Import this file into the group selected? An import into the wrong group can only be undone by deleting that group's chats.">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid">
       <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
@@ -56,9 +57,10 @@
 
 <div class="card">
   <header><h3>Erase a member</h3></header>
-  <p class="card-note">Deletes everything they wrote and rebuilds the chunks that contained it. To keep them
-    erased as they keep writing, add them to the group's opt-out list as well.</p>
-  <form method="post" action="/admin/data/purge" onsubmit="return confirm('Erase this member\'s history? This cannot be undone.')">
+  <p class="card-note">Deletes everything they wrote, their questions and their corrections, and rebuilds the chunks
+    that contained them. To keep them erased as they keep writing, add them to the group's opt-out list as well.
+    Sender ids appear in the group's exported messages.</p>
+  <form method="post" action="/admin/data/purge" data-confirm="Erase this member's history? This cannot be undone.">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid">
       <label>Group <select name="group_id" required>{% for g in groups %}<option value="{{ g.id }}">{{ g.name or g.external_id }}</option>{% endfor %}</select></label>
@@ -74,8 +76,8 @@
     what it answered and what it cost. Keeping them is how you tell whether the assistant is any good, so clear
     them when you want the record gone, not as routine maintenance. <strong>The Cost page is computed from this
     table</strong>, so spending history goes with it. Leave the age empty to clear everything.</p>
-  <form method="post" action="/admin/data/questions/clear"
-        onsubmit="return confirm('Delete these questions and their cost history? This cannot be undone.')">
+  <form method="post" action="/admin/data/questions/clear" data-confirm-typed="DELETE"
+        data-confirm="Delete these questions and their cost history? It cannot be undone. Type DELETE to confirm:">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid">
       <label>Group

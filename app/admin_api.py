@@ -180,7 +180,7 @@ def apply_group(group_id, fields):
     audit.log("group.update", str(group_id), clean)
     for sender, counts in purged:
         audit.log("member.purge", row["external_id"], {"sender": sender, **counts})
-    return row
+    return row, purged
 
 
 @router.get("/groups")
@@ -195,7 +195,8 @@ def create_group(body: GroupIn):
 
 @router.patch("/groups/{group_id}")
 def patch_group(group_id: int, body: GroupPatch):
-    return apply_group(group_id, body.model_dump(exclude_unset=True))
+    row, _ = apply_group(group_id, body.model_dump(exclude_unset=True))
+    return row
 
 
 @router.delete("/groups/{group_id}", status_code=204)

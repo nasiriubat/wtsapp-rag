@@ -10,7 +10,7 @@ pages = APIRouter()
 actions = APIRouter()
 
 
-def _view(request, message=None):
+def _view(request):
     rows = documents.list_all()
     return admin.render(
         request,
@@ -19,13 +19,12 @@ def _view(request, message=None):
         groups=groups.list_all(),
         pending=any(r["status"] == "pending" for r in rows),
         max_mb=documents.MAX_BYTES // 1024 // 1024,
-        message=message,
     )
 
 
 @pages.get("/documents", response_class=HTMLResponse)
-def page(request: Request, message: str | None = None):
-    return _view(request, message)
+def page(request: Request):
+    return _view(request)
 
 
 @pages.get("/documents/table", response_class=HTMLResponse)
@@ -55,8 +54,10 @@ async def upload(group_id: str = Form(""), files: list[UploadFile] = File(defaul
             refused.append(f"{f.filename}: {e}")
     audit.log("document.upload", external_id or "all", {"files": added})
     where = group["name"] or "the group" if group else "every group"
-    note = f"Uploaded {added} file{'s' if added != 1 else ''} for {where}; reading them now"
-    return admin.redirect("/admin/documents", "; ".join([note, *refused]))
+    note = f"Uploaded {added} file{'s' if added != 1 else ''} for {where}; reading them now."
+    if refused:
+        return admin.redirect("/admin/documents", f"{note} Not taken: {'; '.join(refused)}", kind="bad")
+    return admin.redirect("/admin/documents", note)
 
 
 @actions.post("/documents/{document_id}/reindex")

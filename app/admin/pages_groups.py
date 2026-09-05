@@ -43,28 +43,33 @@ def threshold_stat(external_id, value):
     return f"At {value:.2f}: {pct:.0f}% of the last {n} questions would have been refused ({refused})."
 
 
-@pages.get("/groups/{group_id}", response_class=HTMLResponse)
-def edit(request: Request, group_id: int, saved: bool = False):
-    group = groups.get_by_id(group_id)
-    if group is None:
-        raise HTTPException(404)
+def _edit_page(request, group, error=None, status=200):
     return admin.render(
         request,
         "group.html",
         group=group,
         providers=providers.list_all(),
         default_id=groups.global_settings()["default_provider_id"],
-        threshold=threshold_stat(group["external_id"], group["settings"]["confidence_threshold"]),
-        saved=saved,
+        threshold=threshold_stat(group["external_id"], float(group["settings"]["confidence_threshold"])),
+        error=error,
+        status_code=status,
     )
 
 
-@pages.get("/groups/{group_id}/threshold", response_class=HTMLResponse)
-def threshold(group_id: int, value: float):
+@pages.get("/groups/{group_id}", response_class=HTMLResponse)
+def edit(request: Request, group_id: int):
     group = groups.get_by_id(group_id)
     if group is None:
         raise HTTPException(404)
-    return HTMLResponse(admin.escape(threshold_stat(group["external_id"], value)))
+    return _edit_page(request, group)
+
+
+@pages.get("/groups/{group_id}/threshold", response_class=HTMLResponse)
+def threshold(group_id: int, confidence_threshold: float):
+    group = groups.get_by_id(group_id)
+    if group is None:
+        raise HTTPException(404)
+    return HTMLResponse(admin.escape(threshold_stat(group["external_id"], confidence_threshold)))
 
 
 def _lines(raw):
@@ -82,12 +87,13 @@ def _number(raw, cast, field):
 
 @actions.post("/groups/{group_id}")
 def save(
+    request: Request,
     group_id: int,
     name: str = Form(""),
     enabled: bool = Form(False),
     provider_id: str = Form(""),
     triggers: str = Form(""),
-    confidence_threshold: float = Form(0.1),
+    confidence_threshold: float = Form(0.0),
     refusal_text: str = Form(""),
     answer_language: str = Form(""),
     retention_days: str = Form(""),
@@ -101,34 +107,87 @@ def save(
     index_files: bool = Form(False),
     correction_ack: str = Form(""),
 ):
-    # Empty fields fall back to the Settings defaults through validation.
-    raw = {
-        "confidence_threshold": confidence_threshold,
-        "retention_days": _number(retention_days, int, "retention days"),
-        "opt_out": _lines(opt_out),
-        "monthly_cap_eur": _number(monthly_cap_eur, float, "monthly cap"),
-        "decision_tracking": decision_tracking,
-        "allow_dm": allow_dm,
-        "index_files": index_files,
-    }
-    if correction_ack.strip():
-        raw["correction_ack"] = correction_ack.strip()
-    if triggers.strip():
-        raw["triggers"] = _lines(triggers)
-    if refusal_text.strip():
-        raw["refusal_text"] = refusal_text.strip()
-    if answer_language.strip():
-        raw["answer_language"] = answer_language.strip()
-    if quiet_start and quiet_end:
-        raw["quiet_hours"] = {"start": quiet_start, "end": quiet_end, "tz": quiet_tz.strip() or "UTC"}
-    fields = {
-        "name": name.strip() or None,
-        "enabled": enabled,
-        "provider_id": _number(provider_id, int, "provider"),
-        "settings": raw,
-    }
-    admin_api.apply_group(group_id, fields)
-    return RedirectResponse(f"/admin/groups/{group_id}?saved=1", status_code=303)
+    group = groups.get_by_id(group_id)
+    if group is None:
+        raise HTTPException(404)
+
+    # What was typed, kept as typed, so a form that fails validation comes back
+    # with every field as the admin left it rather than as an error page.
+    def as_typed():
+        quiet = {"start": quiet_start, "end": quiet_end, "tz": quiet_tz} if quiet_start or quiet_end else None
+        settings = {
+            **group["settings"],
+            "triggers": _lines(triggers),
+            "confidence_threshold": confidence_threshold,
+            "refusal_text": refusal_text,
+            "answer_language": answer_language,
+            "retention_days": retention_days,
+            "opt_out": _lines(opt_out),
+            "quiet_hours": quiet,
+            "monthly_cap_eur": monthly_cap_eur,
+            "decision_tracking": decision_tracking,
+            "allow_dm": allow_dm,
+            "index_files": index_files,
+            "correction_ack": correction_ack,
+        }
+        return {
+            **group,
+            "name": name,
+            "enabled": enabled,
+            "provider_id": provider_id or None,
+            "settings": settings,
+        }
+
+    if bool(quiet_start) != bool(quiet_end):
+        return _edit_page(request, as_typed(), "Quiet hours need both a start and an end, or neither.", 422)
+    try:
+        # Empty fields fall back to the Settings defaults through validation.
+        raw = {
+            "confidence_threshold": confidence_threshold,
+            "retention_days": _number(retention_days, int, "retention days"),
+            "opt_out": _lines(opt_out),
+            "monthly_cap_eur": _number(monthly_cap_eur, float, "monthly cap"),
+            "decision_tracking": decision_tracking,
+            "allow_dm": allow_dm,
+            "index_files": index_files,
+        }
+        if correction_ack.strip():
+            raw["correction_ack"] = correction_ack.strip()
+        if triggers.strip():
+            raw["triggers"] = _lines(triggers)
+        if refusal_text.strip():
+            raw["refusal_text"] = refusal_text.strip()
+        if answer_language.strip():
+            raw["answer_language"] = answer_language.strip()
+        if quiet_start and quiet_end:
+            raw["quiet_hours"] = {"start": quiet_start, "end": quiet_end, "tz": quiet_tz.strip() or "UTC"}
+        fields = {
+            "name": name.strip() or None,
+            "enabled": enabled,
+            "provider_id": _number(provider_id, int, "provider"),
+            "settings": raw,
+        }
+        row, purged = admin_api.apply_group(group_id, fields)
+    except HTTPException as e:
+        if e.status_code != 422:
+            raise
+        return _edit_page(request, as_typed(), _plain(e.detail), 422)
+    note = "Saved."
+    if purged:
+        erased = ", ".join(f"{sender} ({c['messages']} messages)" for sender, c in purged)
+        note = f"Saved. Erased everything written by {erased}."
+    return admin.redirect(f"/admin/groups/{group_id}", note)
+
+
+def _plain(detail):
+    """pydantic's report of a bad field, as one sentence."""
+    text = str(detail)
+    if "validation error" in text:
+        lines = [ln.strip() for ln in text.splitlines()[1:] if ln.strip() and not ln.startswith("    For")]
+        text = "; ".join(
+            f"{lines[i]}: {lines[i + 1].split('[')[0].strip()}" for i in range(0, len(lines) - 1, 2)
+        )
+    return text
 
 
 @actions.post("/groups/{group_id}/delete")

@@ -1,4 +1,5 @@
 <div style="padding:16px 20px; background:var(--surface-sunken); border-bottom:1px solid var(--border)">
+  {% if saved %}<div class="notice ok" role="status" style="margin-bottom:12px">Marked {{ saved }}. This row is now part of the exported eval set.</div>{% endif %}
   <p><strong>Question</strong><br>{{ row.question }}</p>
   <p><strong>Answer</strong><br>{{ row.answer }}</p>
   <p class="muted" style="font-size:12.5px">
@@ -17,7 +18,7 @@
         <tr>
           <td class="num">{{ '%.3f' % c.score }}</td>
           <td><span class="pill">{{ c.source }}</span></td>
-          <td class="wrap">{% if c.chunk %}<span class="muted" style="font-size:12px">{{ c.chunk.start_ts.strftime('%d %b %Y') }}</span><br>{{ c.chunk.content }}{% else %}<span class="muted">chunk {{ c.chunk_id }} no longer exists</span>{% endif %}</td>
+          <td class="wrap">{% if c.chunk %}<span class="muted" style="font-size:12px">{{ c.chunk.start_ts.strftime('%d %b %Y') if c.chunk.start_ts else 'file' }}</span><br>{{ c.chunk.content }}{% else %}<span class="muted">chunk {{ c.chunk_id }} no longer exists</span>{% endif %}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -25,7 +26,7 @@
   </details>
   {% endif %}
   <form hx-post="/admin/questions/{{ row.id }}/feedback" hx-target="closest div" hx-swap="outerHTML"
-        style="margin-top:12px">
+        hx-disabled-elt="find button" style="margin-top:12px">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="grid" style="align-items:end">
       <label style="margin:0">What should it have said?
@@ -38,13 +39,8 @@
       </div>
     </div>
   </form>
-</div>
-
-<div class="card">
-  <header><h3>Danger zone</h3></header>
-  <p class="card-note">Deleting a question removes it from the log, the cost figures and the exported eval set.</p>
-  <form method="post" action="/admin/questions/{{ row.id }}/delete"
-        onsubmit="return confirm('Delete this question and its answer?')">
-    <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Delete this question</button>
+  <form method="post" action="/admin/questions/{{ row.id }}/delete" style="margin-top:10px"
+        data-confirm="Delete this question and its answer? It leaves the log, the cost figures and the eval set.">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" style="color:var(--danger)">Delete this question</button>
   </form>
 </div>

@@ -37,7 +37,8 @@ def test_login_sets_a_signed_cookie_and_health_renders(browser):
     assert "admin_session" in browser.cookies
     res = browser.get("/admin")
     assert res.status_code == 200
-    assert "Health" in res.text and "Questions today" in res.text
+    assert "Health" in res.text and "Questions, last 24 h" in res.text
+    assert res.headers["content-security-policy"].startswith("default-src 'self'")
 
 
 def test_tampered_cookie_is_a_logout(browser):
@@ -59,3 +60,32 @@ def test_posts_need_the_csrf_token(browser):
 def test_static_assets_are_served(client):
     assert client.get("/static/htmx.min.js").status_code == 200
     assert client.get("/static/app.css").status_code == 200
+
+
+def csrf_of(browser):
+    return browser.get("/admin").text.split('name="csrf" value="')[1].split('"')[0]
+
+
+def test_a_form_error_comes_back_as_a_page_with_the_way_back(browser):
+    login(browser)
+    csrf = csrf_of(browser)
+    res = browser.post(
+        "/admin/cost/cap",
+        data={"csrf": csrf, "monthly_cap_eur": "ten euros"},
+        headers={"accept": "text/html", "referer": "/admin/cost"},
+    )
+    assert res.status_code == 422
+    assert "monthly cap" in res.text and 'href="/admin/cost"' in res.text and "Go back" in res.text
+    # An htmx call gets a fragment it can drop into the page instead.
+    res = browser.post(
+        "/admin/cost/cap",
+        data={"csrf": csrf, "monthly_cap_eur": "ten euros"},
+        headers={"accept": "text/html", "hx-request": "true"},
+    )
+    assert res.status_code == 422 and res.text.startswith('<div class="notice bad"')
+
+
+def test_a_crafted_flash_cookie_is_ignored(browser):
+    login(browser)
+    browser.cookies.set("flash", "eyJraW5kIjogIm9rIiwgInRleHQiOiAiWW91ciBrZXkgZXhwaXJlZCJ9.forged")
+    assert "Your key expired" not in browser.get("/admin").text

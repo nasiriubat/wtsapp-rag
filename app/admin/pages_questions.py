@@ -4,35 +4,51 @@ from fastapi.responses import HTMLResponse
 import admin
 import audit
 import db
+import groups
 from admin import jsonl
 
 pages = APIRouter()
 actions = APIRouter()
 
 FILTERS = {
-    "all": "TRUE",
-    "answered": "outcome = 'answered'",
-    "refused": "outcome = 'refused'",
-    "other": "outcome NOT IN ('answered', 'refused')",
-    "negative": "feedback = -1",
-    "low": "confidence < 0.3",
+    "all": ("All", "TRUE"),
+    "answered": ("Answered", "outcome = 'answered'"),
+    "refused": ("Refused", "outcome = 'refused'"),
+    "other": ("Errors and budget", "outcome NOT IN ('answered', 'refused', 'dm', 'extract')"),
+    "negative": ("Marked wrong", "feedback = -1"),
+    "low": ("Low confidence", "confidence < 0.3"),
 }
+PAGE = 50
 
 
 @pages.get("/questions", response_class=HTMLResponse)
-def index(request: Request, filter: str = "all", before: int | None = None):
-    where = FILTERS.get(filter, "TRUE")
+def index(request: Request, filter: str = "all", q: str = "", group: str = "", page: int = 1):
+    where = FILTERS.get(filter, FILTERS["all"])[1]
+    page = max(page, 1)
     with db.connect() as conn:
         rows = conn.execute(
             f"""
             SELECT q.*, g.name AS group_name FROM query_log q
             LEFT JOIN groups g ON g.external_id = q.group_id
-            WHERE {where} AND (%(before)s::bigint IS NULL OR q.id < %(before)s)
-            ORDER BY q.id DESC LIMIT 50
+            WHERE {where}
+              AND (%(q)s = '' OR q.question ILIKE %(like)s OR q.answer ILIKE %(like)s)
+              AND (%(group)s = '' OR q.group_id = %(group)s)
+            ORDER BY q.id DESC LIMIT %(limit)s OFFSET %(offset)s
             """,
-            {"before": before},
+            {"q": q, "like": f"%{q}%", "group": group, "limit": PAGE + 1, "offset": (page - 1) * PAGE},
         ).fetchall()
-    return admin.render(request, "questions.html", rows=rows, filter=filter, filters=FILTERS)
+    return admin.render(
+        request,
+        "questions.html",
+        rows=rows[:PAGE],
+        more=len(rows) > PAGE,
+        page=page,
+        q=q,
+        group=group,
+        groups=groups.list_all(),
+        filter=filter,
+        filters=FILTERS,
+    )
 
 
 def _detail(question_id):
@@ -64,7 +80,13 @@ def feedback(request: Request, question_id: int, value: int = Form(), note: str 
             (value or None, note.strip() or None, question_id),
         )
     row, retrieved = _detail(question_id)
-    return admin.render(request, "question_detail.html", row=row, retrieved=retrieved)
+    return admin.render(
+        request,
+        "question_detail.html",
+        row=row,
+        retrieved=retrieved,
+        saved={1: "good", -1: "wrong"}.get(value),
+    )
 
 
 @actions.post("/questions/{question_id}/delete")

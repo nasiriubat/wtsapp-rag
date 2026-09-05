@@ -70,14 +70,24 @@ def provider(request: Request, ok: int | None = None, detail: str = ""):
 
 
 @actions.post("/provider")
-def add_provider(kind: str = Form(), api_key: str = Form(), model: str = Form(), base_url: str = Form("")):
+def add_provider(
+    kind: str = Form(),
+    api_key: str = Form(),
+    model: str = Form(),
+    name: str = Form(""),
+    base_url: str = Form(""),
+    price_in: float = Form(0),
+    price_out: float = Form(0),
+):
     row = admin_api.add_provider(
         {
-            "name": kind.capitalize(),
+            "name": name.strip() or kind.capitalize(),
             "kind": kind,
             "api_key": api_key,
             "model": model,
             "base_url": base_url or None,
+            "price_in": price_in,
+            "price_out": price_out,
         }
     )
     try:

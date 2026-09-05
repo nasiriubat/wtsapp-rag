@@ -8,7 +8,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import psycopg
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -85,6 +87,45 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+def _wants_page(request):
+    return request.url.path.startswith(("/admin", "/setup")) and "text/html" in request.headers.get(
+        "accept", ""
+    )
+
+
+@app.exception_handler(HTTPException)
+async def _http_error(request: Request, exc: HTTPException):
+    # A redirect to the login page is an HTTPException too; only real errors
+    # become a page.
+    if _wants_page(request) and exc.status_code >= 400:
+        return admin.error_response(request, exc.status_code, exc.detail)
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError):
+    if _wants_page(request):
+        fields = "; ".join(f"{'.'.join(str(p) for p in e['loc'][1:])}: {e['msg']}" for e in exc.errors())
+        return admin.error_response(request, 422, fields or "the form was not filled in correctly")
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.middleware("http")
+async def _panel_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/admin", "/setup")):
+        # No inline script anywhere in the panel, so the policy can say so.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; frame-ancestors 'none'; form-action 'self'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "same-origin"
+    return response
+
+
 app.include_router(gateway_api.router)
 app.include_router(admin_api.router)
 app.include_router(admin.public)

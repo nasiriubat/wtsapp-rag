@@ -1,16 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Questions{% endblock %}
 {% block subtitle %}<p class="sub">Every question asked, what it retrieved, and what it cost.</p>{% endblock %}
-{% block topbar_actions %}<a href="/admin/questions.jsonl" class="btn secondary">Export .jsonl</a>{% endblock %}
+{% block topbar_actions %}<a href="/admin/questions.jsonl" class="btn secondary">Export all as .jsonl</a>{% endblock %}
 {% block body %}
 <div class="card">
+  <form method="get" action="/admin/questions" class="filters">
+    <input type="hidden" name="filter" value="{{ filter }}">
+    <label>Search <input name="q" value="{{ q }}" placeholder="a word from the question or the answer"></label>
+    <label>Group
+      <select name="group">
+        <option value="">Every group</option>
+        {% for g in groups %}<option value="{{ g.external_id }}" {% if g.external_id == group %}selected{% endif %}>{{ g.name or g.external_id }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="secondary">Filter</button>
+  </form>
+  <div class="actions" style="margin-top:14px">
+    {% for key, (label, _) in filters.items() %}
+    <a href="/admin/questions?filter={{ key }}&q={{ q | urlencode }}&group={{ group | urlencode }}" class="pill {{ 'accent' if key == filter }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
   <header>
-    <div class="actions">
-      {% for key in filters %}
-      <a href="/admin/questions?filter={{ key }}" class="pill {{ 'accent' if key == filter }}">{{ key }}</a>
-      {% endfor %}
-    </div>
-    <span class="muted" style="font-size:12.5px">Click a row for the chunks behind the answer</span>
+    <h3>{{ 'Page ' ~ page if page > 1 else 'Latest' }}</h3>
+    <span class="muted" style="font-size:12.5px">Open a question for the chunks behind the answer</span>
   </header>
   {% if rows %}
   <div class="table-wrap">
@@ -21,25 +36,29 @@
       </tr></thead>
       <tbody>
       {% for r in rows %}
-        <tr hx-get="/admin/questions/{{ r.id }}" hx-target="#d{{ r.id }}" hx-swap="innerHTML" style="cursor:pointer">
+        <tr>
           <td class="muted" style="white-space:nowrap">{{ r.ts.strftime('%d %b %H:%M') }}</td>
-          <td class="muted">{{ r.group_name or r.group_id }}</td>
-          <td class="wrap">{{ r.question[:110] }}</td>
-          <td class="wrap {{ 'muted' if r.cost is none }}">{{ (r.answer or '')[:110] }}</td>
+          <td class="muted">{{ r.group_name or r.group_id or 'private' }}</td>
+          <td class="wrap"><a href="/admin/questions/{{ r.id }}" hx-get="/admin/questions/{{ r.id }}" hx-target="#d{{ r.id }}" hx-swap="innerHTML">{{ r.question[:110] }}{{ '…' if r.question | length > 110 }}</a></td>
+          <td class="wrap {{ 'muted' if r.cost is none }}">{{ (r.answer or '')[:110] }}{{ '…' if (r.answer or '') | length > 110 }}</td>
           <td class="num">{{ '%.2f' % r.confidence if r.confidence is not none else '' }}</td>
           <td class="num">{{ '%.1fs' % (r.latency_ms / 1000) if r.latency_ms else '' }}</td>
-          <td class="num">{{ '%.4f' % r.cost if r.cost is not none else '' }}</td>
+          <td class="num">{{ '€%.4f' % r.cost if r.cost is not none else '' }}</td>
           <td>{% if r.feedback == 1 %}<span class="pill ok">good</span>{% elif r.feedback == -1 %}<span class="pill bad">wrong</span>{% endif %}</td>
         </tr>
-        <tr><td colspan="8" id="d{{ r.id }}" style="padding:0"></td></tr>
+        <tr><td colspan="8" id="d{{ r.id }}" style="padding:0" aria-live="polite"></td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div class="empty"><strong>Nothing here yet</strong>
-    {% if filter != 'all' %}No questions match this filter.{% else %}Ask the bot something in a group you enabled.{% endif %}</div>
+  <div class="empty"><strong>Nothing here</strong>
+    {% if q or group or filter != 'all' %}No questions match.{% else %}Ask the bot something in a group you enabled.{% endif %}</div>
   {% endif %}
 </div>
-{% if rows %}<p><a href="/admin/questions?filter={{ filter }}&before={{ rows[-1].id }}" class="btn secondary">Older</a></p>{% endif %}
+{% set base = '/admin/questions?filter=' ~ filter ~ '&q=' ~ (q | urlencode) ~ '&group=' ~ (group | urlencode) %}
+<div class="pager">
+  {% if page > 1 %}<a href="{{ base }}&page={{ page - 1 }}" class="btn secondary">Newer</a>{% endif %}
+  {% if more %}<a href="{{ base }}&page={{ page + 1 }}" class="btn secondary">Older</a>{% endif %}
+</div>
 {% endblock %}

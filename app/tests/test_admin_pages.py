@@ -68,7 +68,7 @@ def test_group_settings_form_roundtrip_and_threshold_stat(browser):
     page = browser.get(f"/admin/groups/{group_id}").text
     # The default threshold is 0, so nothing would have been refused.
     assert "Cabin" in page and "0% of the last 3 questions" in page
-    frag = browser.get(f"/admin/groups/{group_id}/threshold?value=0.6").text
+    frag = browser.get(f"/admin/groups/{group_id}/threshold?confidence_threshold=0.6").text
     assert "67% of the last 3 questions" in frag
 
     form = dict(
@@ -104,3 +104,31 @@ def test_group_settings_form_roundtrip_and_threshold_stat(browser):
     assert groups.get_by_id(group_id) is None
     with db.connect() as conn:
         conn.execute("DELETE FROM query_log WHERE group_id = %s", (gid,))
+
+
+def test_a_bad_group_setting_keeps_what_was_typed(browser):
+    import groups
+
+    group = groups.create("whatsapp", f"test-{uuid.uuid4()}@g.us", "Cabin")
+    typed = dict(
+        name="Cabin renamed",
+        triggers="@bot, hey",
+        confidence_threshold="0.4",
+        refusal_text="Nope.",
+        answer_language="Finnish",
+        quiet_start="22:00",
+        quiet_end="",
+        quiet_tz="Europe/Helsinki",
+    )
+    res = post(browser, f"/admin/groups/{group['id']}", **typed)
+    assert res.status_code == 422
+    page = res.text
+    assert "both a start and an end" in page
+    for value in ("Cabin renamed", "@bot, hey", "Nope.", "Finnish", 'value="22:00"'):
+        assert value in page, value
+    # A time zone pydantic rejects is reported in one sentence, not a JSON dump.
+    bad_zone = {**typed, "quiet_end": "07:00", "quiet_tz": "Helsinki"}
+    res = post(browser, f"/admin/groups/{group['id']}", **bad_zone)
+    assert res.status_code == 422 and "unknown time zone" in res.text and "validation error" not in res.text
+    assert "Nope." in res.text
+    groups.delete(group["id"])

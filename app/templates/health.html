@@ -3,33 +3,40 @@
 {% block subtitle %}<p class="sub">What the assistant is doing right now.</p>{% endblock %}
 {% block body %}
 {% if db_error %}
-<div class="notice bad"><strong>Postgres is not answering.</strong> {{ db_error }}</div>
+<div class="notice bad" role="alert"><strong>Postgres is not answering.</strong> {{ db_error }}</div>
 {% else %}
 {% set live = channels.values() | selectattr('connected') | list %}
 {% set reported = channels.values() | selectattr('reported_at') | list %}
-<div class="stats">
+{% if providers and not default_id %}
+<div class="notice bad" role="alert">No provider is the default, so every question is refused.
+  <a href="/admin/providers">Choose one on the Providers page.</a></div>
+{% elif not providers %}
+<div class="notice bad" role="alert">No model provider yet, so nothing can be answered.
+  <a href="/setup/provider">Add one.</a></div>
+{% endif %}
+<div class="stats" hx-get="/admin" hx-select=".stats" hx-swap="outerHTML" hx-trigger="every 30s">
   <div class="tile">
     <div class="k">Channels</div>
     {% if live %}
       <div class="v">{{ live | length }} <small>live</small></div>
       <div class="s">{% for k, s in channels.items() if s.connected %}{{ k }}{% if s.jid %} · {{ s.jid }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
     {% elif channels.whatsapp.qr %}
-      <div class="v bad">Not linked</div><div class="s"><a href="/setup/link">Scan the QR →</a></div>
+      <div class="v"><span class="pill bad">not linked</span></div><div class="s"><a href="/setup/link">Scan the QR →</a></div>
     {% elif reported %}
-      <div class="v bad">Disconnected</div><div class="s"><a href="/admin/channels">Open Channels →</a></div>
+      <div class="v"><span class="pill bad">disconnected</span></div><div class="s"><a href="/admin/channels">Open Channels →</a></div>
     {% else %}
-      <div class="v bad">No gateway</div><div class="s">Nothing has reported yet.</div>
+      <div class="v"><span class="pill bad">no gateway</span></div><div class="s">Nothing has reported yet.</div>
     {% endif %}
   </div>
   <div class="tile">
-    <div class="k">Memory</div>
+    <div class="k">What it remembers</div>
     <div class="v">{{ '{:,}'.format(stats.messages) }}</div>
-    <div class="s">messages · {{ '{:,}'.format(stats.chunks) }} chunks{% if stats.unchunked %} · {{ stats.unchunked }} waiting{% endif %}</div>
+    <div class="s">messages in {{ '{:,}'.format(stats.chunks) }} chunks{% if stats.unchunked %} · {{ stats.unchunked }} waiting for a 30-minute gap{% endif %}</div>
   </div>
   <div class="tile">
-    <div class="k">Questions today</div>
+    <div class="k">Questions, last 24 h</div>
     <div class="v">{{ stats.questions_today }}</div>
-    <div class="s">{{ stats.refused_today }} answered with "I don't know"</div>
+    <div class="s">{{ stats.refused_today }} refused: nothing on record</div>
   </div>
   <div class="tile">
     <div class="k">Answer time</div>
@@ -38,20 +45,20 @@
   </div>
   <div class="tile">
     <div class="k">Spend this month</div>
-    <div class="v">€{{ '%.2f' % stats.spent }}</div>
+    <div class="v">€{{ ('%.4f' if 0 < stats.spent < 0.01 else '%.2f') % stats.spent }}</div>
     <div class="s">{% if cap %}of a €{{ cap }} cap · <a href="/admin/cost">Cost</a>{% else %}no global cap · <a href="/admin/cost">set one</a>{% endif %}</div>
   </div>
   <div class="tile">
     <div class="k">Disk</div>
     <div class="v">{{ disk_free_gb }}<small> GB free</small></div>
-    <div class="s">where the models and queue live</div>
+    <div class="s">inside the container, where the models live</div>
   </div>
 </div>
 
 <p class="muted" style="font-size:12.5px">
-  Last message {{ stats.last_message.strftime('%d %b %H:%M') if stats.last_message else 'never' }} ·
+  As of {{ now.strftime('%H:%M') }} UTC, refreshed every 30 seconds ·
+  last message {{ stats.last_message.strftime('%d %b %H:%M') if stats.last_message else 'never' }} ·
   last chunk built {{ stats.last_chunk.strftime('%d %b %H:%M') if stats.last_chunk else 'never' }}.
-  Messages are grouped into chunks after a 30-minute gap in the conversation.
 </p>
 
 <div class="card">

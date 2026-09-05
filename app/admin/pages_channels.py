@@ -59,7 +59,7 @@ def status(kind, row, state):
 
 
 @pages.get("/channels", response_class=HTMLResponse)
-def page(request: Request, message: str | None = None):
+def page(request: Request):
     rows = {c["kind"]: c for c in channels.list_all()}
     state = gateway_state.all_channels()
     view = [
@@ -75,7 +75,7 @@ def page(request: Request, message: str | None = None):
         }
         for kind, traits in channels.KINDS.items()
     ]
-    return admin.render(request, "channels.html", view=view, help=HELP, message=message)
+    return admin.render(request, "channels.html", view=view, help=HELP)
 
 
 @actions.post("/channels/{kind}")

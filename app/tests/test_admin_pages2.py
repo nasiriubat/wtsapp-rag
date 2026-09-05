@@ -84,14 +84,17 @@ def test_data_import_reembed_purge_export(browser, group):
     import db
 
     export = "[02/09/2026, 10:00:15] Anna: Hello all\n[02/09/2026, 10:01:20] Bob: Hi there\n"
-    for expected in ("Imported+2+new", "Imported+0+new"):
+    for expected in ("Imported 2 new of 2 messages, 02 Sep 2026 to 02 Sep 2026", "Imported 0 new of 2"):
         res = browser.post(
             "/admin/data/import",
             data={"csrf": browser.csrf, "group_id": str(group["id"])},
             files={"file": ("chat.txt", export.encode(), "text/plain")},
             follow_redirects=False,
         )
-        assert res.status_code == 303 and expected in res.headers["location"]
+        # The result travels in a signed one-shot cookie and shows on the next page, once.
+        assert res.status_code == 303 and res.headers["location"] == "/admin/data"
+        assert expected in browser.get("/admin/data").text
+        assert expected not in browser.get("/admin/data").text
     assert "Lentäjät" in browser.get("/admin/data").text
 
     with db.connect() as conn:
@@ -120,7 +123,7 @@ def test_data_import_reembed_purge_export(browser, group):
         data={"csrf": browser.csrf, "group_id": str(group["id"]), "sender": "import:Bob"},
         follow_redirects=False,
     )
-    assert res.status_code == 303 and "Erased+1" in res.headers["location"]
+    assert res.status_code == 303 and "Erased 1 messages" in browser.get("/admin/data").text
 
     # Group name has emoji and non-Latin letters; the header must still be valid.
     out = browser.get(f"/admin/data/export/{group['id']}.jsonl")
