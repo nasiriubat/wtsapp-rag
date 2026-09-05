@@ -78,9 +78,9 @@ database dump.
 
 ## 2 Sign in
 
-Open **http://localhost:8000/admin**. The user name is `admin` and the
-password is `ADMIN_PASSWORD` from `.env`. Five wrong attempts pause sign-in
-for a minute.
+Open **http://localhost:8000/setup**. There is no user name; type
+`ADMIN_PASSWORD` from `.env`. Five wrong attempts pause sign-in for a minute,
+and you land on the page you asked for once you are in.
 
 Everything is bound to localhost. To reach the panel from another machine,
 put a reverse proxy with TLS in front of it rather than publishing the port.
@@ -92,7 +92,9 @@ the same machine or on a Docker network. And `/metrics` and the detailed
 nothing about how busy your groups are.
 
 The wizard at **http://localhost:8000/setup** walks the same five steps this
-guide does, and remembers where you are.
+guide does, remembers where you are, and once a model, a channel and a group
+are in place it says so instead of starting over. The panel proper is at
+**http://localhost:8000/admin**.
 
 ---
 
@@ -144,7 +146,8 @@ Go to **Channels**. Each one is independent; you can run all four.
 
 ### WhatsApp, by pairing a phone
 
-1. On the Channels page make sure WhatsApp is **Enabled**.
+1. On the Channels page make sure WhatsApp is **Enabled**, and press **Save**
+   if you changed it.
 2. Open **Setup → Connect WhatsApp**. A QR code appears within a few seconds.
 3. On the phone: **WhatsApp → Settings → Linked devices → Link a device**, and
    scan it.
@@ -226,7 +229,14 @@ older history.
 
 ## 6 Ask the first question
 
-In one of those groups, send:
+You can ask from the browser before anyone in the group does. The last wizard
+step, and the top of the **Questions** page, have an **Ask it from here** box:
+pick the group, type a question, and you get the answer, the citation and
+the chunks it retrieved with their scores. It is one real model call, logged
+like any other question with the panel as the asker, and never throttled.
+That is also how you test a tuning change without a phone.
+
+From the group itself, send:
 
 ```
 @agent hello
@@ -318,6 +328,15 @@ say what changed and when; it costs one small model call per chunk. Private
 questions let members of this group message the bot directly. The correction
 acknowledgement is what it replies when somebody corrects it.
 
+**Decisions on record** lists what the assistant currently treats as settled,
+with what each decision replaced. A bad extraction or a mischievous
+correction can be removed there, which makes whatever it replaced current
+again. **Members** lists everyone who has written in the group with a
+one-click **Opt out and erase**.
+
+**Answers with**, on the groups list, shows which model answers in each group
+and whether that is the global default or the group's own choice.
+
 **Limits and privacy.** A monthly euro cap for this group, a retention window
 in days, opted-out members whose history is erased when you save, and quiet
 hours during which it stays silent.
@@ -364,6 +383,7 @@ says exactly what it takes with it.
 | A group's whole chat | Data → **Delete chats** on that row | Every message, chunk and recorded decision for the group. Uploaded files survive; they were not said in the chat. |
 | The question log | Data → **Clear the question log** | Questions, answers, what was retrieved, and the **cost history**, which is computed from the same table. Optionally only rows older than N days, or only one group. |
 | One question | Questions → open it → **Delete this question** | That row alone. |
+| A decision on record | Groups → the group → **Decisions on record** → Remove | That fact; anything it had replaced becomes current again. |
 | A file | Knowledge → **Delete** | The document and everything indexed from it. |
 | Old data, automatically | Groups → the group → **Retention (days)** | Messages and chunks age out on their own. Documents are not aged out. |
 
@@ -374,6 +394,10 @@ Clear it when you want the record gone, not as housekeeping.
 ---
 
 ## 12 Troubleshooting
+
+Every change made in the panel is on **Audit log**, with what changed and
+secrets masked. A red banner at the top of every page means an enabled
+channel is not connected. The panel refreshes Health every 30 seconds.
 
 | What you see | What to check |
 |---|---|

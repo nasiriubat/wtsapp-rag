@@ -90,6 +90,24 @@ limits stated.
 - Audit log for every DB query: who asked, what SQL, how many rows.
 - MCP conformance CLI (`mcp check <url>`) published standalone.
 
+## Deferred from the v1.1 audit (`docs/AUDIT.md`)
+
+- A hello message posted to a group when it is enabled, so members learn the
+  trigger word. Needs an outbound path from the app to each channel.
+- Import preview and undo: parse the export first and show "1,432 messages,
+  Mar 2024 to Sep 2026, into Cabin crew?" before inserting; keep the batch's
+  ids so it can be undone.
+- Upload progress for large files; a time limit on "reading…".
+- Per-group analytics: refusal rate, trend, top askers.
+- Knowledge export: documents and decisions as a file.
+- A global default answer language; a picker for time zones.
+- Post-relink group repair: map old group ids to the new number's view.
+- Serving the docs from the panel, so a fork or an air-gapped install is not
+  sent to the upstream repository.
+- A `SECRET_KEY` rotation script that re-encrypts in one transaction, and
+  splitting the session-signing key from the at-rest key.
+- Baking the models into the image so first boot needs no network.
+
 ## Parked — memory and features
 
 - Rolling daily summaries per group, as a retrieval aid only. Meta ships

@@ -1,7 +1,9 @@
 # What has not been verified against the real thing
 
 Updated per phase. Everything else in the repo has a test, a CI job, or a
-recorded manual check behind it.
+recorded manual check behind it; the panel's pages were walked in a real
+browser on desktop and at phone width on 5 Sept 2026, with no automated
+accessibility check.
 
 ## Verified on a real phone (5 Sept 2026)
 
@@ -22,9 +24,12 @@ recorded manual check behind it.
 - Recording our own sent message with `is_bot = true`.
 - Reconnect after a dropped socket; the logged-out path.
 - The gateway staying silent when the app returns `answer: null`.
-- Wizard steps 3 to 5 against a real link: the QR the gateway reports
-  scanning successfully, `groupFetchAllParticipating` returning the group
-  list, and the round-trip detector seeing the first real question.
+- The round-trip detector on the wizard's last step seeing a question
+  arrive from the phone (the panel's own Ask box was verified against the
+  live install on 5 Sept 2026; the QR scan and the group list are in the
+  verified section above).
+- Files shared in a WhatsApp group being downloaded and indexed; the unit
+  tests cover the message shapes and the size check, not a real download.
 - Relink: the gateway logging out in process, clearing its auth files and
   pairing again with a fresh QR when the admin asks.
 

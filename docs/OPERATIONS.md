@@ -137,7 +137,7 @@ their scores. Then:
   chunk it did pick; re-embed the group from the Data page after a chunking
   change.
 - The right conversation was retrieved but the answer is wrong: mark it with
-  the thumbs-down and a note. Those rows are the eval set.
+  **Wrong** and a note. Those rows are the eval set.
 - The answer is out of date: reply to it in the group with "wrong, it's X".
   That stores a correction that outranks what the answer was built on.
 

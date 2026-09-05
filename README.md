@@ -42,17 +42,22 @@ quote of the message it came from, or says it does not know.
 - Ask privately: a DM to the bot is answered from the groups you belong to,
   with a text citation. Private questions are never stored as group messages,
   though like every question they appear in the admin's question log.
-- Monthly budget caps per group and globally, member opt-out, quiet hours,
+- Monthly budget caps per group and globally (€10 a month out of the box),
+  ten questions per member per ten minutes, member opt-out, quiet hours,
   retention. Every question is logged with retrieved chunks, timings, tokens
   and cost, and the log, a group's whole history or one member's can be erased
-  from the Data page.
+  from the Data page. Every admin change is on the audit page.
+- Ask it from the panel: the answer, the citation and the retrieved chunks
+  with their scores, without a phone. Decisions on record and members are
+  listed per group, each removable in one click.
 - Embeddings and the reranker run locally on CPU. No chat text leaves the box
   until the answer step.
 
-Status: v1.0. Admin panel and setup wizard at `http://localhost:8000/admin`.
+Status: v1.1. Admin panel and setup wizard at `http://localhost:8000/admin`.
 Measured numbers in [docs/EVAL.md](docs/EVAL.md), the runbook in
 [docs/OPERATIONS.md](docs/OPERATIONS.md), the threat model and its gaps in
-[SECURITY.md](SECURITY.md), what is deliberately not built in `BACKLOG.md`.
+[SECURITY.md](SECURITY.md), the audit that shaped v1.1 in
+[docs/AUDIT.md](docs/AUDIT.md), what is deliberately not built in `BACKLOG.md`.
 
 Telegram: create the bot with @BotFather, run `/setprivacy` → Disable so it
 sees every group message, add it to the group. Discord: create an
@@ -84,8 +89,9 @@ each credential comes from: which console page issues an Anthropic, Gemini,
 OpenAI or OpenRouter key, the BotFather and Discord developer portal steps,
 Meta's Cloud API flow, and how to change or remove a connection later.
 
-Everything the panel does is also a JSON API with HTTP Basic auth under
-`/api`, for scripts:
+Providers, groups, global settings, questions and the audit log are also a
+JSON API with HTTP Basic auth under `/api`, for scripts; channels, files,
+cost and erasure are panel-only:
 
 ### Providers
 

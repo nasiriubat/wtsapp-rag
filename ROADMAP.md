@@ -1,11 +1,15 @@
 # Roadmap to v1.0 — production-ready, audited
 
-Status (5 Sept 2026): **v1.0 released.** All seven phases are done. Every
+Status (5 Sept 2026): **v1.1 released.** v1.0 shipped the seven phases
+below; a tech-lead audit the same day (`docs/AUDIT.md`) found what happens
+under failure, under load and behind a proxy, and v1.1 is that audit acted
+on. One line of the v1.0 definition is still open: the public group-memory
+benchmark subset in the eval, deferred as `docs/EVAL.md` records. Every
 provider kind was verified live, the panel was driven in a real browser, the
-eval and load numbers are published in `docs/EVAL.md` and already changed two
-defaults, and the backup and restore were rehearsed. What no test here could
-reach is listed in `docs/UNTESTED.md`: a phone for WhatsApp, bot tokens for
-Telegram and Discord, and a business number for the Cloud API.
+eval and load numbers are published in `docs/EVAL.md`, and the backup and
+restore were rehearsed. What no test here could reach is listed in
+`docs/UNTESTED.md`: a phone for WhatsApp, bot tokens for Telegram and
+Discord, and a business number for the Cloud API.
 
 The definition of done below is kept as the record of what was built.
 
@@ -52,7 +56,8 @@ None is asserted.
 - Security: threat model, SECURITY.md listing what is and is not defended,
   prompt-injection handling for retrieved text, rate limit per asker, secrets
   never logged. A code review and a security review per phase.
-- Docs: README, INSTALL, OPERATIONS runbook, CHANGELOG, CONTRIBUTING.
+- Docs: README, the setup guide (`docs/SETUP.md`), OPERATIONS runbook,
+  CHANGELOG, CONTRIBUTING.
 
 ## Rules that stay from v0.1
 
@@ -114,7 +119,7 @@ can without a phone or a token; the final phone test is yours.
   groups by name, round trip.
 - Server-rendered Jinja2 + htmx, vendored, no build step, mobile-first.
 - Deps: `jinja2`, `itsdangerous` (session signing), `python-multipart`
-  (forms), `segno` (QR as SVG, pure Python). htmx and Pico CSS vendored as
+  (forms), `segno` (QR as SVG, pure Python). htmx vendored and a stylesheet of its own, as
   static files.
 
 ### Phase 3 — channels (v0.5)
@@ -159,7 +164,7 @@ can without a phone or a token; the final phone test is yours.
 - Threat model and SECURITY.md. Final `security-review` over the whole tree.
 - OPERATIONS runbook: upgrade, backup, restore (rehearsed), rotate keys,
   recover a banned number, read the logs.
-- CHANGELOG, CONTRIBUTING, INSTALL. Version pins audited. Tag v1.0.0.
+- CHANGELOG, CONTRIBUTING, the setup guide. Version pins audited. Tag v1.0.0.
 - Your phone test. Anything it finds is fixed before the tag.
 
 ## Still parked (see BACKLOG.md)

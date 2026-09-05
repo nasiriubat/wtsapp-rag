@@ -62,7 +62,11 @@ panel. Everything below follows from that.
   never returned by any endpoint. Channel tokens are returned to the gateway
   by `/gateway/config`, which requires `GATEWAY_TOKEN`: that token is
   therefore worth as much as the channel tokens themselves.
-- Every admin write is recorded in `audit_log` with the actor and the change.
+- Every admin write is recorded in `audit_log` with the actor and the change,
+  secrets masked at any depth, and shown on the panel's Audit log page.
+- The panel serves a Content Security Policy with no inline script, the
+  result of an action travels in a signed one-shot cookie rather than the
+  URL, and the login's `next` only ever points at a path on this site.
 
 ## What is not defended
 

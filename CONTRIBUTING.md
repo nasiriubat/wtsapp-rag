@@ -4,7 +4,7 @@
 
 ```
 cp .env.example .env          # set the passwords and secrets
-docker compose up -d --build  # first start downloads ~2.5 GB of models
+docker compose up -d --build  # first start downloads ~1 GB of models
 pip install -r app/requirements-dev.txt
 ```
 
@@ -12,8 +12,8 @@ pip install -r app/requirements-dev.txt
 
 ```
 ruff check app && ruff format --check app
-pytest                        # set DATABASE_URL, SECRET_KEY, ADMIN_PASSWORD, GATEWAY_TOKEN
-cd gateway && npm ci --legacy-peer-deps && node --test
+pytest                        # DATABASE_URL must name a database ending in _test; see README
+cd gateway && npm ci --legacy-peer-deps && npm test
 ```
 
 CI runs all three plus both Docker images. A red CI is not ready to review.
