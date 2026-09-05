@@ -26,7 +26,7 @@ jobs:
       ADMIN_PASSWORD: ci-admin
       GATEWAY_TOKEN: ci-token
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -46,7 +46,7 @@ jobs:
   node:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -59,7 +59,7 @@ jobs:
   images:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t app-image app
       - run: docker build -t gateway-image gateway
       # A build proves the Dockerfile parses; only a run proves the image starts.
