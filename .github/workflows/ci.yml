@@ -37,7 +37,7 @@ jobs:
       # Every pin in the lock against the advisory databases.
       - run: pip install pip-audit && pip-audit -r app/requirements.lock --require-hashes --progress-spinner off
       # The embedding model, for the retrieval test that uses real vectors.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .models
           key: models-${{ hashFiles('app/models.py') }}
