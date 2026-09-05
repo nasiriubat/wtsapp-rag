@@ -1,11 +1,16 @@
 // What every channel shares: talking to the app, the retry queue, the
 // ingest-then-maybe-answer flow. Channels only map their platform's messages
 // to payloads, decide triggers, and send replies.
+import crypto from "node:crypto";
 import { createQueue } from "./queue.js";
 
 export const blankState = () => ({ connected: false, jid: null, qr: null, groups: [] });
 
 export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_FILE || "data/queue.jsonl" }) {
+  // A phone number in every log line would outlive any erasure. This keeps a
+  // stable handle for correlating one sender's lines without storing who.
+  const who = (jid) => crypto.createHmac("sha256", token).update(String(jid ?? "")).digest("hex").slice(0, 10);
+
   // Returns { status, data }. status 0 means the app was unreachable.
   async function post(route, body) {
     try {
@@ -90,7 +95,7 @@ export function createCore({ appUrl, token, log, queueFile = process.env.QUEUE_F
   async function handle(payload, { trigger, send }) {
     // Metadata only: the logs must not become a plaintext copy of the chat.
     log.info(
-      { wa_msg_id: payload.wa_msg_id, group_id: payload.group_id, sender_jid: payload.sender_jid,
+      { wa_msg_id: payload.wa_msg_id, group_id: payload.group_id, sender: who(payload.sender_jid),
         chars: (payload.body ?? "").length },
       "message",
     );

@@ -5,8 +5,13 @@ import db
 SECRET_KEYS = {"api_key", "token", "app_secret", "verify_token"}
 
 
-def redact(detail):
-    return {k: ("***" if k in SECRET_KEYS else v) for k, v in detail.items()}
+def redact(value):
+    """Secrets can sit at any depth: provider options are an open dict."""
+    if isinstance(value, dict):
+        return {k: ("***" if k in SECRET_KEYS else redact(v)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact(v) for v in value]
+    return value
 
 
 def log(action, target, detail=None):

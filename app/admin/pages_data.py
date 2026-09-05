@@ -99,9 +99,12 @@ def purge(group_id: int = Form(), sender: str = Form()):
     group = groups.get_by_id(group_id)
     if group is None or not sender.strip():
         raise HTTPException(422)
-    n = retention.purge_sender(group["external_id"], sender.strip())
-    audit.log("member.purge", group["external_id"], {"sender": sender.strip(), "messages": n})
-    return _redirect(f"Erased {n} messages from {sender.strip()}")
+    counts = retention.purge_sender(group["external_id"], sender.strip())
+    audit.log("member.purge", group["external_id"], {"sender": sender.strip(), **counts})
+    return _redirect(
+        f"Erased {counts['messages']} messages, {counts['questions']} questions and "
+        f"{counts['statements']} corrections from {sender.strip()}"
+    )
 
 
 @pages.get("/data/export/{group_id}.jsonl")

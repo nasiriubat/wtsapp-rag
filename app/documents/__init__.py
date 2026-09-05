@@ -5,6 +5,7 @@ message id, and the answer cites the label."""
 import hashlib
 import json
 import logging
+import re
 
 import psycopg
 
@@ -39,9 +40,18 @@ def get(document_id):
         return conn.execute(f"SELECT {_COLUMNS} FROM documents WHERE id = %s", (document_id,)).fetchone()
 
 
+def clean_name(filename):
+    """A file name ends up in the prompt and in the reply sent to the chat, and
+    a member choosing it must not get structure or control characters through."""
+    name = re.sub(r"[\x00-\x1f\x7f<>]", "", filename or "").strip()
+    name = re.sub(r"\s+", " ", name)
+    return name[:120] or "file"
+
+
 def create(group_id, filename, mime, data):
     """Store an upload for the loop to read. Re-uploading the same file into the
     same place resets that document instead of making a second one."""
+    filename = clean_name(filename)
     if not data:
         raise Unreadable("the file is empty")
     if len(data) > MAX_BYTES:

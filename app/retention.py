@@ -7,9 +7,14 @@ import db
 log = logging.getLogger(__name__)
 
 
+# Everything a group produces that carries a timestamp. Documents are not
+# here: they were uploaded on purpose and stay until deleted.
+EXPIRES = (("chunks", "end_ts"), ("messages", "ts"), ("query_log", "ts"), ("facts", "valid_from"))
+
+
 def run_once():
     with db.connect() as conn:
-        for table, col in (("chunks", "end_ts"), ("messages", "ts")):
+        for table, col in EXPIRES:
             n = conn.execute(
                 f"""
                 DELETE FROM {table} t USING groups g
@@ -20,6 +25,23 @@ def run_once():
             ).rowcount
             if n:
                 log.info("retention", extra={"table": table, "deleted": n})
+
+
+def purge_group(group_external_id):
+    """Everything: chat, index, decisions, questions, documents. For deleting
+    the group itself."""
+    with db.connect() as conn, conn.transaction():
+        counts = {}
+        for what, sql in (
+            ("chunks", "DELETE FROM chunks WHERE group_id = %s"),
+            ("decisions", "DELETE FROM facts WHERE group_id = %s"),
+            ("messages", "DELETE FROM messages WHERE group_id = %s"),
+            ("questions", "DELETE FROM query_log WHERE group_id = %s"),
+            ("documents", "DELETE FROM documents WHERE group_id = %s"),
+        ):
+            counts[what] = conn.execute(sql, (group_external_id,)).rowcount
+    log.info("purged group", extra={"group": group_external_id, **counts})
+    return counts
 
 
 def purge_group_messages(group_external_id):
@@ -70,5 +92,13 @@ def purge_sender(group_external_id, sender_jid):
         messages = conn.execute(
             "DELETE FROM messages WHERE group_id = %s AND sender_jid = %s", (group_external_id, sender_jid)
         ).rowcount
-    log.info("purged sender", extra={"group": group_external_id, "messages": messages, "chunks": chunks})
-    return messages
+        # Their questions and their corrections carry their id and their words too.
+        questions = conn.execute(
+            "DELETE FROM query_log WHERE group_id = %s AND sender_jid = %s", (group_external_id, sender_jid)
+        ).rowcount
+        statements = conn.execute(
+            "DELETE FROM facts WHERE group_id = %s AND sender_jid = %s", (group_external_id, sender_jid)
+        ).rowcount
+    counts = {"messages": messages, "chunks": chunks, "questions": questions, "statements": statements}
+    log.info("purged sender", extra={"group": group_external_id, **counts})
+    return counts

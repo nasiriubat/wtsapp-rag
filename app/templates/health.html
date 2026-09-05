@@ -65,7 +65,7 @@
         <tr>
           <td><a href="/admin/groups/{{ g.id }}">{{ g.name or g.external_id }}</a></td>
           <td class="muted">{{ g.channel }}</td>
-          <td><code>{{ g.settings.triggers | join('</code> <code>') | safe }}</code></td>
+          <td>{% for t in g.settings.triggers %}<code>{{ t }}</code> {% endfor %}</td>
           <td>{% if g.enabled %}<span class="pill ok">active</span>{% else %}<span class="pill">paused</span>{% endif %}</td>
         </tr>
       {% endfor %}
