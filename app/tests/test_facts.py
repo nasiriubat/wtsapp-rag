@@ -129,3 +129,52 @@ def test_extraction_respects_group_setting(group, monkeypatch):
             (group["external_id"], NOW, NOW),
         )
     extraction.run_once()
+
+
+def test_a_chunk_the_provider_refuses_is_skipped_but_an_outage_is_retried(group, monkeypatch):
+    import httpx
+
+    import db
+    import extraction
+    import groups
+    import providers
+
+    gid = group["external_id"]
+    provider = providers.create("p", "openai", "k", "m")
+    groups.set_global(default_provider_id=provider["id"])
+
+    def http_error(status):
+        req = httpx.Request("POST", "https://x")
+        return httpx.HTTPStatusError("nope", request=req, response=httpx.Response(status, request=req))
+
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO chunks (group_id, content, first_msg_id, start_ts, end_ts) VALUES "
+            "(%s, 'poison', 'm1', %s, %s), (%s, 'fine', 'm2', %s, %s)",
+            (gid, NOW, NOW, gid, NOW, NOW),
+        )
+
+    def extracted():
+        with db.connect() as conn:
+            rows = conn.execute(
+                "SELECT content, facts_extracted FROM chunks WHERE group_id = %s ORDER BY id", (gid,)
+            ).fetchall()
+        return {r["content"]: r["facts_extracted"] for r in rows}
+
+    # A 400 is final for that chunk: mark it and carry on to the next one.
+    monkeypatch.setattr(providers, "generate", lambda p, s, prompt: (_ for _ in ()).throw(http_error(400)))
+    extraction.run_once()
+    assert extracted() == {"poison": True, "fine": True}
+
+    # A 503 or a 429 is the provider's problem: leave the chunk for the next tick.
+    with db.connect() as conn:
+        conn.execute("UPDATE chunks SET facts_extracted = false WHERE group_id = %s", (gid,))
+    monkeypatch.setattr(providers, "generate", lambda p, s, prompt: (_ for _ in ()).throw(http_error(503)))
+    extraction.run_once()
+    assert extracted() == {"poison": False, "fine": False}
+    monkeypatch.setattr(providers, "generate", lambda p, s, prompt: (_ for _ in ()).throw(http_error(429)))
+    extraction.run_once()
+    assert extracted() == {"poison": False, "fine": False}
+
+    providers.delete(provider["id"])
+    groups.set_global(default_provider_id=None)

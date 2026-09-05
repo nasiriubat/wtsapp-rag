@@ -128,18 +128,14 @@ def answer_in(q, group, cite_group=False, found=None):
                 outcome = "dm" if cite_group else "answered"
             else:
                 src = _source(chunks[0], text)
-                if src is None:  # the episode was erased between search and answer
-                    return {
-                        "answer": s["refusal_text"],
-                        "quote": None,
-                        "outcome": "refused",
-                        "confidence": confidence,
-                        "timings": timings,
-                        "source_msg_id": None,
-                    }
-                source_id = src["wa_msg_id"]
-                text, quote = _cite(text, src, group["name"] if cite_group else None)
-                outcome = "dm" if cite_group else "answered"
+                if src is None:
+                    # The episode was erased between search and answer. The call
+                    # was still made and paid for, so it is logged like any other.
+                    text = s["refusal_text"]
+                else:
+                    source_id = src["wa_msg_id"]
+                    text, quote = _cite(text, src, group["name"] if cite_group else None)
+                    outcome = "dm" if cite_group else "answered"
     timings["total_ms"] = round((time.perf_counter() - t0) * 1000)
     observe.count("ask_total", outcome=outcome)
     observe.observe_latency(timings["total_ms"] / 1000)

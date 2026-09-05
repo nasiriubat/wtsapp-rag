@@ -9,6 +9,10 @@ log = logging.getLogger(__name__)
 GAP = timedelta(minutes=30)
 MAX_MESSAGES = 15
 MAX_CHARS = 1600  # roughly 400 tokens
+# One tick after an import or a re-index must not load a year of history at
+# once. A group cut at this boundary gets one extra episode split, nothing worse.
+PER_TICK = 5000
+EMBED_BATCH = 256
 
 
 def _full(episode):
@@ -47,13 +51,17 @@ def run_once():
             FROM messages m LEFT JOIN groups g ON g.external_id = m.group_id
             WHERE NOT m.chunked AND NOT coalesce(g.settings->'opt_out' ? m.sender_jid, false)
             ORDER BY m.group_id, m.ts
-            """
+            LIMIT %s
+            """,
+            (PER_TICK,),
         ).fetchall()
         for group_id, msgs in groupby(rows, key=lambda r: r["group_id"]):
             eps = episodes(list(msgs), now)
             if not eps:
                 continue
-            vectors = embed.passages([_content(ep) for ep in eps])
+            vectors = []
+            for start in range(0, len(eps), EMBED_BATCH):
+                vectors += embed.passages([_content(ep) for ep in eps[start : start + EMBED_BATCH]])
             for ep, vec in zip(eps, vectors, strict=True):
                 with conn.transaction():
                     conn.execute(

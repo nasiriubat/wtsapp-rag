@@ -3,6 +3,8 @@ group's provider. Bounded per tick so one busy group cannot starve the rest."""
 
 import logging
 
+import httpx
+
 import budget
 import db
 import facts
@@ -12,6 +14,19 @@ import query_log
 
 log = logging.getLogger(__name__)
 PER_TICK = 20
+
+
+def _refused(err):
+    """A 4xx other than rate limiting is the provider's final word on this chunk."""
+    if not isinstance(err, httpx.HTTPStatusError):
+        return False
+    status = err.response.status_code
+    return 400 <= status < 500 and status != 429
+
+
+def _mark(chunk_id):
+    with db.connect() as conn:
+        conn.execute("UPDATE chunks SET facts_extracted = true WHERE id = %s", (chunk_id,))
 
 
 def run_once():
@@ -32,10 +47,15 @@ def run_once():
             try:
                 added, tokens_in, tokens_out = facts.extract(chunk, provider)
             except Exception as e:  # noqa: BLE001  (a provider outage must not stop the loop)
+                if _refused(e):
+                    # The provider will never take this chunk (content filter, too
+                    # long). Leaving it unmarked would block every chunk behind it.
+                    log.warning("chunk skipped by provider", extra={"chunk": chunk["id"], "err": str(e)})
+                    _mark(chunk["id"])
+                    continue
                 log.warning("extraction failed", extra={"chunk": chunk["id"], "err": str(e)})
                 break
-            with db.connect() as conn:
-                conn.execute("UPDATE chunks SET facts_extracted = true WHERE id = %s", (chunk["id"],))
+            _mark(chunk["id"])
             query_log.record(
                 group_id=group["external_id"],
                 question=f"[extract] chunk {chunk['id']}",

@@ -2,9 +2,8 @@ import asyncio
 import base64
 import binascii
 import logging
-import os
 import pathlib
-import traceback
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -32,17 +31,44 @@ import retrieval
 log = logging.getLogger("app")
 
 
+# Each background loop and how often it should tick. /health reports a loop
+# that has not completed cleanly in three intervals, so a stalled one is
+# visible without taking the server down with it.
+LOOPS = [
+    (chunking.run_once, 60),
+    (extraction.run_once, 90),
+    (documents.index_pending, 15),
+    (retention.run_once, 3600),
+]
+last_ok: dict[str, float] = {}
+MAX_BACKOFF = 600
+
+
 async def loop(fn, seconds):
+    """A tick that raises is logged and retried after a growing pause. Crashing
+    the process instead would turn one poisonous row into a restart loop that
+    never clears it."""
+    name = fn.__module__
+    last_ok[name] = time.monotonic()
+    delay = seconds
     while True:
-        await asyncio.to_thread(fn)
-        await asyncio.sleep(seconds)
+        try:
+            await asyncio.to_thread(fn)
+            last_ok[name] = time.monotonic()
+            delay = seconds
+        except Exception:
+            log.exception("loop failed", extra={"loop": name, "retry_s": delay})
+            delay = min(delay * 2, MAX_BACKOFF)
+        await asyncio.sleep(delay)
 
 
-def _crash(task):
-    # A dead loop behind a live server is worse than a restart.
-    if not task.cancelled() and task.exception():
-        traceback.print_exception(task.exception())
-        os._exit(1)
+def stalled_loops(now=None):
+    now = time.monotonic() if now is None else now
+    return {
+        fn.__module__: round(now - last_ok[fn.__module__])
+        for fn, seconds in LOOPS
+        if fn.__module__ in last_ok and now - last_ok[fn.__module__] > 3 * seconds
+    }
 
 
 @asynccontextmanager
@@ -52,14 +78,7 @@ async def lifespan(app):
     bootstrap.run()
     # Two independent downloads and ONNX sessions; wall time is the max, not the sum.
     await asyncio.gather(asyncio.to_thread(embed.warm), asyncio.to_thread(retrieval.warm))
-    tasks = [
-        asyncio.create_task(loop(chunking.run_once, 60)),
-        asyncio.create_task(loop(extraction.run_once, 90)),
-        asyncio.create_task(loop(documents.index_pending, 15)),
-        asyncio.create_task(loop(retention.run_once, 3600)),
-    ]
-    for t in tasks:
-        t.add_done_callback(_crash)
+    tasks = [asyncio.create_task(loop(fn, seconds)) for fn, seconds in LOOPS]
     yield
     for t in tasks:
         t.cancel()
@@ -81,7 +100,7 @@ app.mount(
 @app.get("/health")
 def health(response: Response):
     # uvicorn only serves after lifespan finished, so models are loaded whenever
-    # this answers. The database is the only thing that can be down.
+    # this answers. What can be down is the database, or a background loop.
     try:
         with db.connect() as conn:
             last = conn.execute("SELECT end_ts FROM chunks ORDER BY id DESC LIMIT 1").fetchone()
@@ -92,7 +111,16 @@ def health(response: Response):
         log.error("health check failed", extra={"err": str(e).strip()})
         response.status_code = 503
         return {"db": "down"}
-    return {"db": "ok", "last_chunk_ts": last["end_ts"] if last else None, "unchunked_messages": pending}
+    stalled = stalled_loops()
+    if stalled:
+        response.status_code = 503
+    return {
+        "db": "ok",
+        "loops": "ok" if not stalled else "stalled",
+        "stalled_loops": stalled,
+        "last_chunk_ts": last["end_ts"] if last else None,
+        "unchunked_messages": pending,
+    }
 
 
 @app.get("/metrics")

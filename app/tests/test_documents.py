@@ -169,3 +169,42 @@ def test_a_file_shared_in_a_chat_is_indexed_only_when_the_group_asked_for_it(cli
 
     documents.delete(stored[0]["id"])
     groups.delete(group["id"])
+
+
+def test_a_damaged_pdf_is_marked_failed_not_crashed(stub_embeddings):
+    import documents
+
+    document_id = documents.create(
+        None, f"broken-{uuid.uuid4()}.pdf", "application/pdf", b"%PDF-1.4 garbage" * 40
+    )
+    documents.index_pending()
+    row = documents.get(document_id)
+    assert row["status"] == "failed" and "PDF" in row["error"]
+    documents.delete(document_id)
+
+
+def test_a_parser_bug_quarantines_the_document_instead_of_the_process(stub_embeddings, monkeypatch):
+    import documents
+
+    def explode(*a, **kw):
+        raise TypeError("a bug in our own code, not the file")
+
+    monkeypatch.setattr(documents, "read", explode)
+    document_id = documents.create(None, f"bug-{uuid.uuid4()}.md", "text/markdown", TEXT)
+    documents.index_pending()  # must return, not raise
+    row = documents.get(document_id)
+    assert row["status"] == "failed" and "log" in row["error"]
+    # Marked, so the next tick does not meet it again.
+    monkeypatch.setattr(documents, "read", lambda *a, **kw: pytest.fail("re-read a quarantined document"))
+    documents.index_pending()
+    documents.delete(document_id)
+
+
+def test_what_comes_out_of_a_file_is_capped_whatever_went_in():
+    from documents.read import MAX_PARTS, MAX_TEXT, Unreadable, _bounded
+
+    _bounded([("a", "x" * 100)])
+    with pytest.raises(Unreadable, match="Split it up"):
+        _bounded([("a", "x")] * (MAX_PARTS + 1))
+    with pytest.raises(Unreadable, match="Split it up"):
+        _bounded([("a", "x" * (MAX_TEXT + 1))])

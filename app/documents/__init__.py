@@ -6,6 +6,8 @@ import hashlib
 import json
 import logging
 
+import psycopg
+
 import db
 import embed
 import groups
@@ -129,6 +131,15 @@ def _index(row):
     except Unreadable as e:
         _fail(row["id"], str(e))
         log.info("document unreadable", extra={"document": row["id"], "reason": str(e)})
+        return
+    except psycopg.Error:
+        # The database, not the document. Leave it pending; the loop backs off.
+        raise
+    except Exception:
+        # A parser or model bug on this one file. Quarantine the row so the loop
+        # does not meet the same file again on every tick; the log has the trace.
+        log.exception("document indexing crashed", extra={"document": row["id"]})
+        _fail(row["id"], "could not be read; the server log has the details")
         return
     log.info("document indexed", extra={"document": row["id"], "parts": len(parts)})
 

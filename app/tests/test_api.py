@@ -61,3 +61,39 @@ def test_every_migration_file_is_recorded(client):
     with db.connect() as conn:
         rows = conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
     assert [r["version"] for r in rows] == sorted(p.name for p in migrate.DIR.glob("*.sql"))
+
+
+def test_a_loop_that_raises_backs_off_instead_of_ending_the_process():
+    import asyncio
+
+    import main
+
+    ticks = []
+
+    def flaky():
+        ticks.append(1)
+        if len(ticks) == 1:
+            raise RuntimeError("one bad tick")
+
+    async def run():
+        task = asyncio.create_task(main.loop(flaky, 0.01))
+        await asyncio.sleep(0.2)
+        task.cancel()
+
+    asyncio.run(run())
+    assert len(ticks) >= 3  # it kept going after the failure
+
+
+def test_health_reports_a_stalled_loop(client, monkeypatch):
+    import time
+
+    import main
+
+    fn, seconds = main.LOOPS[0]
+    monkeypatch.setitem(main.last_ok, fn.__module__, time.monotonic() - 10 * seconds)
+    res = client.get("/health")
+    assert res.status_code == 503
+    assert res.json()["loops"] == "stalled" and fn.__module__ in res.json()["stalled_loops"]
+
+    monkeypatch.setitem(main.last_ok, fn.__module__, time.monotonic())
+    assert client.get("/health").json()["loops"] == "ok"

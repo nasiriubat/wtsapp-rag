@@ -19,6 +19,10 @@ log = logging.getLogger(__name__)
 
 MAX_BYTES = 25 * 1024 * 1024
 MAX_CHARS = 1600  # the size of a chat episode, so the two score comparably
+# Office files are zip archives; a small one can inflate to gigabytes of XML.
+# What comes out is capped, whatever went in.
+MAX_TEXT = 2_000_000
+MAX_PARTS = 2000
 VISION_PAGES = 20  # a scanned page costs one model call, so cap the bill
 TEXT_PER_PAGE = 80  # below this a PDF page has no text layer worth keeping
 
@@ -79,16 +83,21 @@ def _describe(provider, data, mime):
 
 
 def _pdf(filename, data, provider):
-    with pdfplumber.open(io.BytesIO(data)) as pdf:
-        pages = [(page, (page.extract_text() or "").strip()) for page in pdf.pages]
-        if not pages:
-            raise Unreadable("this PDF has no pages")
-        if all(len(text) < TEXT_PER_PAGE for _, text in pages):
-            return _scanned(filename, pages, provider)
-        parts = []
-        for number, (_, text) in enumerate(pages, 1):
-            if text:
-                parts += _slice(text, f"{filename}, page {number}")
+    try:
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            pages = [(page, (page.extract_text() or "").strip()) for page in pdf.pages]
+            if not pages:
+                raise Unreadable("this PDF has no pages")
+            if all(len(text) < TEXT_PER_PAGE for _, text in pages):
+                return _scanned(filename, pages, provider)
+            parts = []
+            for number, (_, text) in enumerate(pages, 1):
+                if text:
+                    parts += _slice(text, f"{filename}, page {number}")
+    except Unreadable:
+        raise
+    except Exception as e:  # pdfminer raises a dozen types on a damaged file
+        raise Unreadable(f"this PDF could not be read: {e}") from e
     if not parts:
         raise Unreadable("no text could be extracted from this PDF")
     return parts
@@ -109,8 +118,22 @@ def _scanned(filename, pages, provider):
     return parts
 
 
+def _bounded(parts):
+    total = sum(len(text) for _, text in parts)
+    if len(parts) > MAX_PARTS or total > MAX_TEXT:
+        raise Unreadable(
+            f"this file expands to {total:,} characters in {len(parts)} parts, more than the "
+            f"{MAX_TEXT:,} allowed. Split it up."
+        )
+    return parts
+
+
 def read(filename, mime, data, provider=None):
     """Parts of (label, text). Raises Unreadable with a sentence for the admin."""
+    return _bounded(_read(filename, mime, data, provider))
+
+
+def _read(filename, mime, data, provider):
     if not data:
         raise Unreadable("the file is empty")
     if len(data) > MAX_BYTES:
