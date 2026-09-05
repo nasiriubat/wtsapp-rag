@@ -3,6 +3,7 @@ main.py owns the HTTP shape; this owns what happens to a question."""
 
 import re
 import time
+from collections import deque
 
 import answer
 import budget
@@ -22,6 +23,35 @@ CORRECTION = re.compile(
     r"^\s*(?:(?:wrong|nope|actually|correction|väärin|korjaus)[\s,.:!-]*|(?:no|ei)[,.:!-]\s*)", re.I
 )
 DM_CANDIDATES = 5
+# Questions one person may ask in a window, across every group. Enough for a
+# lively evening, not enough to loop the bot into a bill.
+RATE_LIMIT, RATE_WINDOW = 10, 600
+SLOW_DOWN = "That is a lot of questions in a row. Ask again in a few minutes."
+_asked = {}  # sender_jid -> deque of monotonic times
+
+
+def throttle(q, now=None):
+    """The response for a sender over the limit, or None. Checked before any
+    retrieval runs, so a flood costs nothing but this lookup."""
+    now = time.monotonic() if now is None else now
+    if len(_asked) > 10_000:
+        for k in [k for k, v in _asked.items() if not v]:
+            _asked.pop(k, None)
+    recent = _asked.setdefault(q.sender_jid, deque())
+    while recent and now - recent[0] > RATE_WINDOW:
+        recent.popleft()
+    if len(recent) >= RATE_LIMIT:
+        observe.count("ask_total", outcome="rate_limited")
+        query_log.record(
+            group_id=q.group_id,
+            sender_jid=q.sender_jid,
+            question=q.question,
+            answer=SLOW_DOWN,
+            outcome="rate_limited",
+        )
+        return {"answer": SLOW_DOWN, "quote": None, "outcome": "rate_limited"}
+    recent.append(now)
+    return None
 
 
 def _words(text):

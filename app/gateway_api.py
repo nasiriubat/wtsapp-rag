@@ -11,9 +11,13 @@ import gateway_state
 import groups
 
 
-def require_token(authorization: str = Header(default="")):
+def token_ok(authorization):
     expected = f"Bearer {os.environ['GATEWAY_TOKEN']}"
-    if not secrets.compare_digest(authorization.encode(), expected.encode()):
+    return secrets.compare_digest(authorization.encode(), expected.encode())
+
+
+def require_token(authorization: str = Header(default="")):
+    if not token_ok(authorization):
         raise HTTPException(401, "gateway token required")
 
 

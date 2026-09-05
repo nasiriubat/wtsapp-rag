@@ -22,7 +22,8 @@ basic = HTTPBasic()
 def require_admin(request: Request, creds: HTTPBasicCredentials = Depends(basic)):
     # Same lockout as the panel: this must not be an unthrottled password oracle.
     ok_user = secrets.compare_digest(creds.username.encode(), b"admin")
-    if not (ok_user and auth.check_password(creds.password, request.client.host if request.client else "?")):
+    client = request.client.host if request.client else "?"
+    if not (ok_user and auth.check_password(creds.password, client, scope="api")):
         raise HTTPException(401, "admin credentials required", headers={"WWW-Authenticate": "Basic"})
 
 
@@ -177,8 +178,8 @@ def apply_group(group_id, fields):
     if row is None:
         raise HTTPException(404)
     audit.log("group.update", str(group_id), clean)
-    for sender, n in purged:
-        audit.log("member.purge", row["external_id"], {"sender": sender, "messages": n})
+    for sender, counts in purged:
+        audit.log("member.purge", row["external_id"], {"sender": sender, **counts})
     return row
 
 
@@ -199,8 +200,16 @@ def patch_group(group_id: int, body: GroupPatch):
 
 @router.delete("/groups/{group_id}", status_code=204)
 def delete_group(group_id: int):
-    groups.delete(group_id)
-    audit.log("group.delete", str(group_id))
+    remove_group(group_id)
+
+
+def remove_group(group_id):
+    """The group and everything it ever produced, in one transaction."""
+    counts = groups.delete(group_id)
+    if counts is None:
+        raise HTTPException(404)
+    audit.log("group.delete", str(group_id), counts)
+    return counts
 
 
 # --- global settings, questions, audit -------------------------------------

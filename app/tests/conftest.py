@@ -40,3 +40,14 @@ def stub_embeddings(monkeypatch):
 
     monkeypatch.setattr(embed, "passages", lambda texts: [[0.1] * 384 for _ in texts])
     monkeypatch.setattr(embed, "query", lambda text: [0.1] * 384)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_throttle():
+    """Tests reuse a few sender ids; none of them is trying to flood the bot."""
+    try:
+        import asking
+
+        asking._asked.clear()
+    except ImportError:
+        pass

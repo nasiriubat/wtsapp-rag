@@ -1,5 +1,6 @@
 """Admin login: one password, a signed session cookie, CSRF on every POST."""
 
+import hashlib
 import hmac
 import os
 import secrets
@@ -10,24 +11,53 @@ from itsdangerous import BadSignature, TimestampSigner
 
 COOKIE = "admin_session"
 MAX_AGE = 7 * 86400
-_failures = {}  # client address -> {"count", "until"}; one client cannot lock out another
+PER_CLIENT = 5  # wrong guesses before one client waits
+GLOBAL = 20  # wrong guesses a minute from everyone before everyone waits
+LOCK = 60
+MAX_TRACKED = 10_000
+
+# Two throttles. Per client, so one guesser cannot lock the admin out. And a
+# global one, because "the client" is whatever X-Forwarded-For says once a
+# proxy is in front: rotating that header must not buy a fresh allowance.
+_failures = {}  # (scope, client) -> {"count", "until"}
+_global = {"count": 0, "since": 0.0, "until": 0.0}
 
 
 def _signer():
-    return TimestampSigner(os.environ["SECRET_KEY"], salt="admin-session")
+    # The password is part of the salt, so changing it invalidates every
+    # session that was signed under the old one. Rotating a leaked password
+    # then logs the thief out as well as you.
+    fingerprint = hashlib.sha256(os.environ["ADMIN_PASSWORD"].encode()).hexdigest()[:16]
+    return TimestampSigner(os.environ["SECRET_KEY"], salt=f"admin-session:{fingerprint}")
 
 
-def check_password(password, client):
+def _sweep(now):
+    if len(_failures) > MAX_TRACKED:
+        _failures.clear()  # the global throttle still holds
+        return
+    for key in [k for k, f in _failures.items() if f["count"] == 0 and now >= f["until"]]:
+        _failures.pop(key, None)
+
+
+def check_password(password, client, scope="panel"):
     now = time.time()
-    f = _failures.setdefault(client, {"count": 0, "until": 0.0})
+    _sweep(now)
+    if now < _global["until"]:
+        raise HTTPException(429, "too many attempts; wait a minute")
+    f = _failures.setdefault((scope, client), {"count": 0, "until": 0.0})
     if now < f["until"]:
         raise HTTPException(429, "too many attempts; wait a minute")
     if secrets.compare_digest(password.encode(), os.environ["ADMIN_PASSWORD"].encode()):
-        _failures.pop(client, None)
+        _failures.pop((scope, client), None)
         return True
     f["count"] += 1
-    if f["count"] >= 5:
-        f.update(count=0, until=now + 60)
+    if f["count"] >= PER_CLIENT:
+        f.update(count=0, until=now + LOCK)
+    if now - _global["since"] > LOCK:
+        _global.update(count=0, since=now)
+    _global["count"] += 1
+    if _global["count"] >= GLOBAL:
+        _global.update(count=0, since=now, until=now + LOCK)
     return False
 
 

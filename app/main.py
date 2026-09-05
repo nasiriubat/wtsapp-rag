@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -98,7 +98,9 @@ app.mount(
 
 
 @app.get("/health")
-def health(response: Response):
+def health(response: Response, authorization: str = Header(default="")):
+    """Anyone may ask whether it is up. What is stalled and how much is queued
+    says how busy the groups are, so that part needs the gateway token."""
     # uvicorn only serves after lifespan finished, so models are loaded whenever
     # this answers. What can be down is the database, or a background loop.
     try:
@@ -114,16 +116,15 @@ def health(response: Response):
     stalled = stalled_loops()
     if stalled:
         response.status_code = 503
-    return {
-        "db": "ok",
-        "loops": "ok" if not stalled else "stalled",
-        "stalled_loops": stalled,
-        "last_chunk_ts": last["end_ts"] if last else None,
-        "unchunked_messages": pending,
-    }
+    out = {"db": "ok", "loops": "ok" if not stalled else "stalled"}
+    if gateway_api.token_ok(authorization):
+        out.update(
+            stalled_loops=stalled, last_chunk_ts=last["end_ts"] if last else None, unchunked_messages=pending
+        )
+    return out
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(gateway_api.require_token)])
 def metrics():
     return Response(observe.render(), media_type="text/plain; version=0.0.4")
 
@@ -202,6 +203,9 @@ class Question(BaseModel):
 
 @app.post("/ask", dependencies=[Depends(gateway_api.require_token)])
 def ask(q: Question):
+    throttled = asking.throttle(q)
+    if throttled:
+        return {"answer": throttled["answer"], "quote": None}
     if q.group_id is None:
         res = asking.answer_privately(q)
         return {"answer": res["answer"], "quote": None}

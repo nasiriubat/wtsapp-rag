@@ -49,7 +49,10 @@ def test_health_reports_db_state(client, monkeypatch):
 
 
 def test_metrics_endpoint_is_prometheus_text(client):
-    res = client.get("/metrics")
+    from conftest import GW
+
+    assert client.get("/metrics").status_code == 401  # says how busy the groups are
+    res = client.get("/metrics", headers=GW)
     assert res.status_code == 200
     assert "# TYPE ask_latency_seconds histogram" in res.text
 
@@ -90,8 +93,10 @@ def test_health_reports_a_stalled_loop(client, monkeypatch):
     import main
 
     fn, seconds = main.LOOPS[0]
+    from conftest import GW
+
     monkeypatch.setitem(main.last_ok, fn.__module__, time.monotonic() - 10 * seconds)
-    res = client.get("/health")
+    res = client.get("/health", headers=GW)
     assert res.status_code == 503
     assert res.json()["loops"] == "stalled" and fn.__module__ in res.json()["stalled_loops"]
 

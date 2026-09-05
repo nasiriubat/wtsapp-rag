@@ -59,7 +59,9 @@ class Settings(BaseModel):
 
 class GlobalSettings(BaseModel):
     default_provider_id: int | None = None
-    monthly_cap_eur: float | None = Field(None, ge=0)
+    # A fresh install fails safe: one member looping the bot cannot run up an
+    # open-ended bill. The admin raises or clears it on the Cost page.
+    monthly_cap_eur: float | None = Field(10.0, ge=0)
 
 
 def in_quiet_hours(settings, now=None):
@@ -130,8 +132,16 @@ def apply(group_id, **fields):
 
 
 def delete(group_id):
+    """The group and everything it produced. Orphaned rows would otherwise
+    outlive the retention window forever, because retention joins on groups.
+    Returns the counts, or None when there was no such group."""
+    row = get_by_id(group_id)
+    if row is None:
+        return None
+    counts = retention.purge_group(row["external_id"])
     with db.connect() as conn:
         conn.execute("DELETE FROM groups WHERE id = %s", (group_id,))
+    return counts
 
 
 def dm_candidates(sender_jid, reported_members):
@@ -147,9 +157,15 @@ def dm_candidates(sender_jid, reported_members):
             )
         }
 
-    def member_of(external_id):
-        listed = reported_members.get(external_id)
-        return sender_jid in listed if listed else external_id in wrote
+    def member_of(g):
+        listed = reported_members.get(g["external_id"])
+        if listed is not None:
+            return sender_jid in listed
+        # WhatsApp can list members. No list yet means the gateway has not
+        # reported this group, and until it does nobody is a member of it.
+        if g["channel"] == "whatsapp":
+            return False
+        return g["external_id"] in wrote
 
     # A private question is still a question from this group: opting out and
     # quiet hours silence it here too.
@@ -160,7 +176,7 @@ def dm_candidates(sender_jid, reported_members):
         and g["settings"]["allow_dm"]
         and sender_jid not in g["settings"]["opt_out"]
         and not in_quiet_hours(g["settings"])
-        and member_of(g["external_id"])
+        and member_of(g)
     ]
 
 

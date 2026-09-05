@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 import admin
 import admin_api
-import audit
 import channels
 import db
 import gateway_state
@@ -134,6 +133,6 @@ def save(
 
 @actions.post("/groups/{group_id}/delete")
 def delete(group_id: int):
-    groups.delete(group_id)
-    audit.log("group.delete", str(group_id))
-    return RedirectResponse("/admin/groups", status_code=303)
+    counts = admin_api.remove_group(group_id)
+    gone = ", ".join(f"{n} {what}" for what, n in counts.items() if n)
+    return admin.redirect("/admin/groups", f"Removed the group and {gone or 'nothing else'}")
